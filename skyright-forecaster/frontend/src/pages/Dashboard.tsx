@@ -5,6 +5,7 @@ import CrewsManagement from '../components/CrewsManagement';
 import CustomProjectsManagement from '../components/CustomProjectsManagement';
 import PipelineTracker from '../components/PipelineTracker';
 import SalesForecastInput from '../components/SalesForecastInput';
+import MetricsDashboard from '../components/MetricsDashboard';
 
 interface Forecast {
   id: string;
@@ -24,7 +25,7 @@ interface Parameters {
   seasonalAdjustment: number;
 }
 
-type TabType = 'forecasts' | 'crews' | 'projects' | 'pipeline' | 'sales';
+type TabType = 'forecasts' | 'crews' | 'projects' | 'pipeline' | 'sales' | 'metrics';
 
 export default function Dashboard() {
   const { user, token } = useAuthStore();
@@ -209,6 +210,16 @@ export default function Dashboard() {
               }`}
             >
               Sales Forecast
+            </button>
+            <button
+              onClick={() => setActiveTab('metrics')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'metrics'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+              }`}
+            >
+              Metrics
             </button>
           </div>
         </div>
@@ -440,6 +451,9 @@ export default function Dashboard() {
 
         {/* Sales Forecast Tab */}
         {activeTab === 'sales' && <SalesForecastInput />}
+
+        {/* Metrics Tab */}
+        {activeTab === 'metrics' && <MetricsDashboard />}
       </div>
     </div>
   );
