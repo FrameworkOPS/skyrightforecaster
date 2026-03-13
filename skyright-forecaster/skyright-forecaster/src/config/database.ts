@@ -146,6 +146,81 @@ export async function initializeDatabase(): Promise<void> {
         timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
 
+      CREATE TABLE IF NOT EXISTS pipeline_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        job_type VARCHAR(50) NOT NULL,
+        square_footage DECIMAL(10, 2) NOT NULL,
+        estimated_days_to_completion INTEGER NOT NULL,
+        revenue_per_sq DECIMAL(10, 2) NOT NULL,
+        total_revenue DECIMAL(12, 2) NOT NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'pending',
+        added_date DATE NOT NULL,
+        target_start_date DATE,
+        notes TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_by UUID REFERENCES users(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS sales_forecast (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        forecast_week DATE NOT NULL,
+        job_type VARCHAR(50) NOT NULL,
+        projected_square_footage DECIMAL(10, 2) NOT NULL,
+        projected_job_count INTEGER DEFAULT 0,
+        notes TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_by UUID REFERENCES users(id),
+        UNIQUE(forecast_week, job_type)
+      );
+
+      CREATE TABLE IF NOT EXISTS crew_staff (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        crew_id UUID NOT NULL REFERENCES crews(id) ON DELETE CASCADE,
+        lead_count INTEGER NOT NULL DEFAULT 0,
+        super_count INTEGER NOT NULL DEFAULT 0,
+        added_date DATE NOT NULL,
+        notes TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_by UUID REFERENCES users(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS production_actuals (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        production_week DATE NOT NULL,
+        job_type VARCHAR(50) NOT NULL,
+        crew_id UUID REFERENCES crews(id),
+        square_footage_completed DECIMAL(10, 2) NOT NULL,
+        jobs_completed INTEGER NOT NULL DEFAULT 0,
+        hours_worked DECIMAL(8, 2),
+        notes TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_by UUID REFERENCES users(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS metrics_snapshots (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        metric_week DATE NOT NULL,
+        job_type VARCHAR(50) NOT NULL,
+        pipeline_sqs DECIMAL(12, 2) NOT NULL,
+        pipeline_jobs INTEGER NOT NULL DEFAULT 0,
+        sales_forecast_sqs DECIMAL(12, 2) NOT NULL,
+        production_rate_sqs DECIMAL(12, 2) NOT NULL,
+        revenue_projected DECIMAL(14, 2) NOT NULL,
+        revenue_produced DECIMAL(14, 2) NOT NULL,
+        queue_growth DECIMAL(12, 2) NOT NULL,
+        avg_lead_time_days INTEGER NOT NULL,
+        capacity_utilization DECIMAL(5, 4) NOT NULL,
+        bottleneck_detected BOOLEAN DEFAULT false,
+        bottleneck_reason TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
       CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
       CREATE INDEX IF NOT EXISTS idx_jobs_install_date ON jobs(install_date);
       CREATE INDEX IF NOT EXISTS idx_jobs_crew_id ON jobs(crew_id);
@@ -157,6 +232,13 @@ export async function initializeDatabase(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_forecast_details_forecast_id ON forecast_details(forecast_id);
       CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON audit_log(user_id);
       CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
+      CREATE INDEX IF NOT EXISTS idx_pipeline_type ON pipeline_items(job_type);
+      CREATE INDEX IF NOT EXISTS idx_pipeline_status ON pipeline_items(status);
+      CREATE INDEX IF NOT EXISTS idx_pipeline_dates ON pipeline_items(added_date, target_start_date);
+      CREATE INDEX IF NOT EXISTS idx_sales_forecast_week_type ON sales_forecast(forecast_week, job_type);
+      CREATE INDEX IF NOT EXISTS idx_crew_staff_crew_id ON crew_staff(crew_id);
+      CREATE INDEX IF NOT EXISTS idx_production_actuals_week_type ON production_actuals(production_week, job_type);
+      CREATE INDEX IF NOT EXISTS idx_metrics_snapshots_week_type ON metrics_snapshots(metric_week, job_type);
     `);
 
     console.log('Database initialized successfully');

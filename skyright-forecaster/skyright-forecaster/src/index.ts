@@ -12,6 +12,9 @@ import hubspotRoutes from './routes/hubspotRoutes';
 import insightsRoutes from './routes/insightsRoutes';
 import crewsRoutes from './routes/crewsRoutes';
 import customProjectsRoutes from './routes/customProjectsRoutes';
+import pipelineRoutes from './routes/pipelineRoutes';
+import salesForecastRoutes from './routes/salesForecastRoutes';
+import crewStaffRoutes from './routes/crewStaffRoutes';
 
 dotenv.config();
 
@@ -42,6 +45,9 @@ app.use('/api/parameters', parametersRoutes);
 app.use('/api/forecasts', forecastRoutes);
 app.use('/api/crews', crewsRoutes);
 app.use('/api/custom-projects', customProjectsRoutes);
+app.use('/api/pipeline', pipelineRoutes);
+app.use('/api/sales-forecast', salesForecastRoutes);
+app.use('/api/crew-staff', crewStaffRoutes);
 app.use('/api/hubspot', hubspotRoutes);
 app.use('/api/insights', insightsRoutes);
 

@@ -3,6 +3,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { useAuthStore } from '../store/authStore';
 import CrewsManagement from '../components/CrewsManagement';
 import CustomProjectsManagement from '../components/CustomProjectsManagement';
+import PipelineTracker from '../components/PipelineTracker';
+import SalesForecastInput from '../components/SalesForecastInput';
 
 interface Forecast {
   id: string;
@@ -22,7 +24,7 @@ interface Parameters {
   seasonalAdjustment: number;
 }
 
-type TabType = 'forecasts' | 'crews' | 'projects';
+type TabType = 'forecasts' | 'crews' | 'projects' | 'pipeline' | 'sales';
 
 export default function Dashboard() {
   const { user, token } = useAuthStore();
@@ -187,6 +189,26 @@ export default function Dashboard() {
               }`}
             >
               Custom Projects
+            </button>
+            <button
+              onClick={() => setActiveTab('pipeline')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'pipeline'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+              }`}
+            >
+              Pipeline
+            </button>
+            <button
+              onClick={() => setActiveTab('sales')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'sales'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+              }`}
+            >
+              Sales Forecast
             </button>
           </div>
         </div>
@@ -412,6 +434,12 @@ export default function Dashboard() {
 
         {/* Custom Projects Tab */}
         {activeTab === 'projects' && <CustomProjectsManagement />}
+
+        {/* Pipeline Tab */}
+        {activeTab === 'pipeline' && <PipelineTracker />}
+
+        {/* Sales Forecast Tab */}
+        {activeTab === 'sales' && <SalesForecastInput />}
       </div>
     </div>
   );
