@@ -1,1 +1,1 @@
-web: bash start.sh
+web: npm run build && npm start
