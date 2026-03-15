@@ -5,6 +5,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_change_in_prod
 const JWT_EXPIRATION = '24h'; // Always use '24h' format for JWT expiration
 
 export interface JWTPayload {
+  id?: string;
   userId: string;
   email: string;
   role: string;

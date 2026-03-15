@@ -109,14 +109,16 @@ export const generateForecast = asyncHandler(async (req: Request<{}, {}, Forecas
 
           // Calculate ramp-down multiplier
           if (crew.terminate_date) {
-            rampDownMultiplier = calculateCrewRampDownMultiplier(crew.terminate_date, forecastDate);
+            rampDownMultiplier = calculateCrewRampDownMultiplier(crew.terminate_date, new Date(forecastDate));
           }
 
           // Check if crew is blocked by custom project
+          const forecastDateObj = new Date(forecastDate);
+          const sevenDaysAhead = new Date(forecastDateObj.getTime() + 7 * 24 * 60 * 60 * 1000);
           blockedByProject = isCrewBlockedByProject(
             job.crew_id,
-            forecastDate,
-            new Date(forecastDate).getTime() + 7 * 24 * 60 * 60 * 1000, // 7 days ahead
+            forecastDateObj,
+            sevenDaysAhead, // 7 days ahead
             customProjects
           );
         }
@@ -159,7 +161,7 @@ export const generateForecast = asyncHandler(async (req: Request<{}, {}, Forecas
 
         let rampDown = 1.0;
         if (crew.terminate_date) {
-          rampDown = calculateCrewRampDownMultiplier(crew.terminate_date, forecastDate);
+          rampDown = calculateCrewRampDownMultiplier(crew.terminate_date, new Date(forecastDate));
         }
 
         sumMultiplier += rampUp * rampDown;
