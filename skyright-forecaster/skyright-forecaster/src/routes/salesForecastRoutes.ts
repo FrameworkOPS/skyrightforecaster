@@ -15,8 +15,8 @@ router.get('/', authenticateToken, getSalesForecasts);
 router.get('/chart-data', authenticateToken, getSalesForecastChartData);
 router.get('/:week/:jobType', authenticateToken, getSalesForecast);
 
-// Protected routes (require admin/manager/scheduler)
-router.post('/', authenticateToken, authorize('admin', 'manager', 'scheduler'), createOrUpdateSalesForecast);
-router.post('/copy-week', authenticateToken, authorize('admin', 'manager', 'scheduler'), copyPreviousWeek);
+// Protected routes (require authentication)
+router.post('/', authenticateToken, createOrUpdateSalesForecast);
+router.post('/copy-week', authenticateToken, copyPreviousWeek);
 
 export default router;

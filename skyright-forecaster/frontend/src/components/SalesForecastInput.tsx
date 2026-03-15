@@ -25,6 +25,7 @@ export default function SalesForecastInput() {
     projectedJobCount: '',
     notes: '',
   });
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     // Initialize default week range (12 weeks from now)
@@ -78,6 +79,7 @@ export default function SalesForecastInput() {
   };
 
   const handleSave = async (week: string, jobType: string) => {
+    setError(null);
     try {
       const payload = {
         forecastWeek: week,
@@ -101,8 +103,15 @@ export default function SalesForecastInput() {
         setEditingType(null);
         setFormData({ projectedSquareFootage: '', projectedJobCount: '', notes: '' });
         await loadForecasts(startWeek, endWeek);
+      } else {
+        const errorData = await res.json();
+        const errorMsg = errorData.message || `Failed to save forecast (${res.status})`;
+        setError(errorMsg);
+        console.error('Error saving forecast:', errorMsg);
       }
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'An error occurred while saving';
+      setError(errorMsg);
       console.error('Error saving forecast:', error);
     }
   };
@@ -170,6 +179,19 @@ export default function SalesForecastInput() {
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-900">Sales Forecast</h2>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+          <p className="font-medium">Error:</p>
+          <p className="text-sm">{error}</p>
+          <button
+            onClick={() => setError(null)}
+            className="text-xs mt-2 text-red-600 hover:text-red-800 underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Week Range Selector */}
       <div className="bg-white p-4 rounded-lg border border-gray-200">
