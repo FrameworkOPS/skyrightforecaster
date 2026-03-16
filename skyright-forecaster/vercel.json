@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "buildCommand": "cd frontend && tsc && vite build",
-  "outputDirectory": "frontend/dist",
+  "buildCommand": "cd skyright-forecaster/frontend && tsc && vite build",
+  "outputDirectory": "skyright-forecaster/frontend/dist",
   "framework": "vite",
   "env": {
     "VITE_API_URL": "@vite_api_url"
