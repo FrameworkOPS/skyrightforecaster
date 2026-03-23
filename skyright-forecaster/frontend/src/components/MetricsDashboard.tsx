@@ -21,6 +21,10 @@ interface MetricsSnapshot {
   capacity_utilization: number;
   bottleneck_detected: boolean;
   bottleneck_reason: string | null;
+  leadTimeStatus?: 'RED' | 'YELLOW' | 'GREEN';
+  crewCount?: number;
+  totalLeads?: number;
+  totalSupervisors?: number;
 }
 
 interface CrewMetrics {
