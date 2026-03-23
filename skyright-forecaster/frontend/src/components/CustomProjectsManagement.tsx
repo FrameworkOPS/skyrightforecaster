@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
+import { API_BASE_URL } from '../utils/apiConfig';
 
 interface Crew {
   id: string;
@@ -49,7 +50,7 @@ export default function CustomProjectsManagement() {
 
   const loadCrews = async () => {
     try {
-      const res = await fetch('http://localhost:5001/api/crews?active=true', {
+      const res = await fetch('${API_BASE_URL}/api/crews?active=true', {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
@@ -72,7 +73,7 @@ export default function CustomProjectsManagement() {
   const loadProjects = async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:5001/api/custom-projects?active=true', {
+      const res = await fetch('${API_BASE_URL}/api/custom-projects?active=true', {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
@@ -96,8 +97,8 @@ export default function CustomProjectsManagement() {
 
     try {
       const url = editingId
-        ? `http://localhost:5001/api/custom-projects/${editingId}`
-        : 'http://localhost:5001/api/custom-projects';
+        ? `${API_BASE_URL}/api/custom-projects/${editingId}`
+        : '${API_BASE_URL}/api/custom-projects';
       const method = editingId ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
@@ -134,7 +135,7 @@ export default function CustomProjectsManagement() {
     if (!confirm('Are you sure you want to delete this project?')) return;
 
     try {
-      const res = await fetch(`http://localhost:5001/api/custom-projects/${projectId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/custom-projects/${projectId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` },
       });

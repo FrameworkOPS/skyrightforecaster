@@ -504,3 +504,106 @@ export const exportForecastPDF = asyncHandler(
     doc.end();
   }
 );
+
+export const getSixMonthForecast = asyncHandler(async (req: Request, res: Response) => {
+  const weeks: Array<any> = [];
+  const startDate = new Date();
+  const mondayStart = new Date(startDate);
+  mondayStart.setDate(mondayStart.getDate() - (startDate.getDay() || 7) + 1);
+
+  // Generate 26 weeks of forecast
+  for (let i = 0; i < 26; i++) {
+    const weekDate = new Date(mondayStart);
+    weekDate.setDate(weekDate.getDate() + i * 7);
+    const weekStr = weekDate.toISOString().split('T')[0];
+
+    // Get metrics for this week
+    const metricsResult = await query(
+      `SELECT * FROM metrics_snapshots
+       WHERE metric_week = $1
+       ORDER BY job_type`,
+      [weekStr]
+    );
+
+    let pipelineSqsShingles = 0;
+    let pipelineSqsMetal = 0;
+    let productionRateShingles = 0;
+    let productionRateMetal = 0;
+    let salesForecastShingles = 0;
+    let salesForecastMetal = 0;
+    let avgLeadTimeWeeks = 0;
+
+    for (const metric of metricsResult.rows) {
+      if (metric.job_type === 'shingle') {
+        pipelineSqsShingles = parseFloat(metric.pipeline_sqs) || 0;
+        productionRateShingles = parseFloat(metric.production_rate_sqs) || 0;
+        salesForecastShingles = parseFloat(metric.sales_forecast_sqs) || 0;
+      } else {
+        pipelineSqsMetal = parseFloat(metric.pipeline_sqs) || 0;
+        productionRateMetal = parseFloat(metric.production_rate_sqs) || 0;
+        salesForecastMetal = parseFloat(metric.sales_forecast_sqs) || 0;
+      }
+      avgLeadTimeWeeks = Math.max(avgLeadTimeWeeks, Math.round(metric.avg_lead_time_days / 7));
+    }
+
+    // Get crew changes for this week
+    const crewAddResult = await query(
+      `SELECT id, crew_name, crew_type FROM crews
+       WHERE start_date = $1::date`,
+      [weekStr]
+    );
+
+    const crewRemoveResult = await query(
+      `SELECT id, crew_name, crew_type FROM crews
+       WHERE terminate_date = $1::date`,
+      [weekStr]
+    );
+
+    const crewChanges = [
+      ...crewAddResult.rows.map((c: any) => ({
+        type: 'added' as const,
+        crew_name: c.crew_name,
+        crew_type: c.crew_type,
+        date: weekStr,
+      })),
+      ...crewRemoveResult.rows.map((c: any) => ({
+        type: 'removed' as const,
+        crew_name: c.crew_name,
+        crew_type: c.crew_type,
+        date: weekStr,
+      })),
+    ];
+
+    // Get custom projects for this week
+    const projectsResult = await query(
+      `SELECT project_name, start_date, end_date FROM custom_projects
+       WHERE is_active = true
+       AND start_date <= $1::date AND end_date >= $2::date`,
+      [weekStr, weekStr]
+    );
+
+    const customProjects = projectsResult.rows.map((p: any) => ({
+      name: p.project_name,
+      start_date: p.start_date,
+      end_date: p.end_date,
+    }));
+
+    weeks.push({
+      week: weekStr,
+      pipeline_sqs_shingles: pipelineSqsShingles,
+      pipeline_sqs_metal: pipelineSqsMetal,
+      production_rate_shingles: productionRateShingles,
+      production_rate_metal: productionRateMetal,
+      sales_forecast_shingles: salesForecastShingles,
+      sales_forecast_metal: salesForecastMetal,
+      avg_lead_time_weeks: avgLeadTimeWeeks,
+      crew_changes: crewChanges,
+      custom_projects: customProjects,
+    });
+  }
+
+  res.json({
+    success: true,
+    data: { weeks },
+  });
+});

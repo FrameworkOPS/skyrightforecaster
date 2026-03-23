@@ -3,6 +3,7 @@ import { query } from '../config/database';
 import HubSpotService from '../services/hubspotService';
 import { AppError, asyncHandler } from '../middleware/errorHandler';
 import { getUUID } from '../utils/uuid';
+import { CLOSING_RATE, CREW_TYPE_RATIOS, REVENUE_PER_SQ } from '../constants/businessConstants';
 
 export const initiateOAuth = asyncHandler(async (req: Request, res: Response) => {
   const clientId = process.env.HUBSPOT_CLIENT_ID;
@@ -115,4 +116,56 @@ export const getHubSpotStatus = asyncHandler(async (req: Request, res: Response)
         : 'HubSpot integration not configured. Please set HUBSPOT_CLIENT_ID and HUBSPOT_CLIENT_SECRET',
     },
   });
+});
+
+export const getPipelineSummary = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('User not authenticated', 401);
+  }
+
+  try {
+    // For now, return mock HubSpot deals if HubSpot service is not configured
+    // In production, you would fetch from HubSpot API via HubSpotService
+    const mockDeals = [
+      {
+        hubspot_id: 'deal-1',
+        dealname: 'Commercial Roofing Project - Downtown',
+        amount: 45000,
+        inferred_job_type: 'shingle',
+        weighted_value: 45000 * CLOSING_RATE * CREW_TYPE_RATIOS.shingles,
+        estimated_sqs: (45000 * CLOSING_RATE * CREW_TYPE_RATIOS.shingles) / REVENUE_PER_SQ.shingles,
+      },
+      {
+        hubspot_id: 'deal-2',
+        dealname: 'Metal Roofing - Industrial Complex',
+        amount: 75000,
+        inferred_job_type: 'metal',
+        weighted_value: 75000 * CLOSING_RATE * CREW_TYPE_RATIOS.metal,
+        estimated_sqs: (75000 * CLOSING_RATE * CREW_TYPE_RATIOS.metal) / REVENUE_PER_SQ.metal,
+      },
+      {
+        hubspot_id: 'deal-3',
+        dealname: 'Residential Roof Replacement',
+        amount: 28000,
+        inferred_job_type: 'shingle',
+        weighted_value: 28000 * CLOSING_RATE * CREW_TYPE_RATIOS.shingles,
+        estimated_sqs: (28000 * CLOSING_RATE * CREW_TYPE_RATIOS.shingles) / REVENUE_PER_SQ.shingles,
+      },
+    ];
+
+    const totalWeightedValue = mockDeals.reduce((sum, d) => sum + d.weighted_value, 0);
+    const totalWeightedSqs = mockDeals.reduce((sum, d) => sum + d.estimated_sqs, 0);
+
+    res.json({
+      success: true,
+      data: {
+        deals: mockDeals,
+        totalWeightedValue,
+        totalWeightedSqs,
+        message: 'HubSpot pipeline summary (mock data)',
+      },
+    });
+  } catch (error) {
+    throw new AppError('Failed to fetch HubSpot pipeline', 500);
+  }
 });

@@ -12,6 +12,8 @@ import {
   daysBetween,
   calculateAverageProductionRate
 } from '../utils/calculations';
+import { LEAD_TIME_THRESHOLDS, REVENUE_PER_SQ } from '../constants/businessConstants';
+import { getLeadTimeStatus } from '../constants/metricsConstants';
 
 interface CrewData {
   id: string;
@@ -150,7 +152,7 @@ export const calculateWeeklyMetrics = asyncHandler(async (req: Request, res: Res
   }
 
   // 5. Revenue projection
-  const revenuePerSq = jobType === 'shingle' ? 600 : 1000;
+  const revenuePerSq = jobType === 'shingle' ? REVENUE_PER_SQ.shingles : REVENUE_PER_SQ.metal;
   const revenueProjected = (pipelineSQs + salesForecastSQs) * revenuePerSq;
   const revenueProduced = productionActualSQs * revenuePerSq;
 
@@ -216,9 +218,54 @@ export const getMetricsDashboardData = asyncHandler(async (req: Request, res: Re
     params
   );
 
+  // Enhance metrics with color-coding and crew information
+  const enhancedData = await Promise.all(result.rows.map(async (metric: any) => {
+    // Calculate lead time in weeks
+    const leadTimeWeeks = Math.round(metric.avg_lead_time_days / 7);
+    const leadTimeStatus = getLeadTimeStatus(leadTimeWeeks);
+
+    // Get crew counts for this metric week and job type
+    const weekDate = new Date(metric.metric_week);
+    const crewCountResult = await query(
+      `SELECT COUNT(*) as crew_count
+       FROM crews
+       WHERE crew_type = $1 AND is_active = true
+       AND start_date <= $2::date
+       AND (terminate_date IS NULL OR terminate_date >= $3::date)`,
+      [metric.job_type, metric.metric_week, metric.metric_week]
+    );
+
+    const crewCount = parseInt(crewCountResult.rows[0]?.crew_count || 0);
+
+    // Get leads and supervisors count
+    const staffResult = await query(
+      `SELECT COALESCE(SUM(lead_count), 0) as total_leads, COALESCE(SUM(super_count), 0) as total_supers
+       FROM crew_staff
+       WHERE crew_id IN (
+         SELECT id FROM crews WHERE crew_type = $1 AND is_active = true
+       )
+       AND added_date <= $2::date
+       AND is_active = true`,
+      [metric.job_type, metric.metric_week]
+    );
+
+    const totalLeads = parseInt(staffResult.rows[0]?.total_leads || 0);
+    const totalSupervisors = parseInt(staffResult.rows[0]?.total_supers || 0);
+
+    return {
+      ...metric,
+      leadTimeWeeks,
+      leadTimeStatus,
+      crewCount,
+      totalLeads,
+      totalSupervisors,
+      revenue_per_sq: metric.job_type === 'shingle' ? REVENUE_PER_SQ.shingles : REVENUE_PER_SQ.metal
+    };
+  }));
+
   res.json({
     success: true,
-    data: result.rows
+    data: enhancedData
   });
 });
 

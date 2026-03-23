@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
+import { API_BASE_URL } from '../utils/apiConfig';
 
 interface PipelineItem {
   id: string;
@@ -27,7 +28,6 @@ interface PipelineSummary {
   combined?: { totalSQs: number; jobCount: number };
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
 export default function PipelineTracker() {
   const { token } = useAuthStore();
@@ -52,7 +52,7 @@ export default function PipelineTracker() {
 
   const loadCrews = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/crews?active=true`, {
+      const res = await fetch(`${API_BASE_URL}/api/crews?active=true`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
@@ -73,7 +73,7 @@ export default function PipelineTracker() {
 
   const loadSummary = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/pipeline/summary`, {
+      const res = await fetch(`${API_BASE_URL}/api/pipeline/summary`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 

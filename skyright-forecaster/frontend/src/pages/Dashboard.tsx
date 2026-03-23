@@ -6,6 +6,7 @@ import CustomProjectsManagement from '../components/CustomProjectsManagement';
 import PipelineTracker from '../components/PipelineTracker';
 import SalesForecastInput from '../components/SalesForecastInput';
 import MetricsDashboard from '../components/MetricsDashboard';
+import SixMonthForecaster from '../components/SixMonthForecaster';
 
 interface Forecast {
   id: string;
@@ -25,7 +26,7 @@ interface Parameters {
   seasonalAdjustment: number;
 }
 
-type TabType = 'forecasts' | 'crews' | 'projects' | 'pipeline' | 'sales' | 'metrics';
+type TabType = 'forecasts' | 'crews' | 'projects' | 'pipeline' | 'sales' | 'metrics' | 'six-month';
 
 export default function Dashboard() {
   const { user, token } = useAuthStore();
@@ -220,6 +221,16 @@ export default function Dashboard() {
               }`}
             >
               Metrics
+            </button>
+            <button
+              onClick={() => setActiveTab('six-month')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'six-month'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+              }`}
+            >
+              6-Month Forecast
             </button>
           </div>
         </div>
@@ -454,6 +465,9 @@ export default function Dashboard() {
 
         {/* Metrics Tab */}
         {activeTab === 'metrics' && <MetricsDashboard />}
+
+        {/* 6-Month Forecast Tab */}
+        {activeTab === 'six-month' && <SixMonthForecaster />}
       </div>
     </div>
   );

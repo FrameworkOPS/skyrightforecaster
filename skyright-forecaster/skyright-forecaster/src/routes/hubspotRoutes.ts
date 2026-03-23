@@ -4,6 +4,7 @@ import {
   handleOAuthCallback,
   syncJobs,
   getHubSpotStatus,
+  getPipelineSummary,
 } from '../controllers/hubspotController';
 import { authenticateToken, authorize } from '../middleware/auth';
 
@@ -19,6 +20,7 @@ router.get('/auth-url', initiateOAuth);
 router.use(authenticateToken);
 
 router.get('/status', getHubSpotStatus);
+router.get('/pipeline-summary', getPipelineSummary);
 router.post('/sync', authorize('admin', 'manager'), syncJobs);
 
 export default router;

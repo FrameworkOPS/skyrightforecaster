@@ -4,6 +4,8 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { useAuthStore } from '../store/authStore';
+import { API_BASE_URL } from '../utils/apiConfig';
+import { REVENUE_PER_SQ, getLeadTimeStatus, getLeadTimeColorClass } from '../constants/businessConstants';
 
 interface MetricsSnapshot {
   metric_week: string;
@@ -29,7 +31,6 @@ interface CrewMetrics {
   super_count: number;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
 export default function MetricsDashboard() {
   const { token } = useAuthStore();
@@ -77,7 +78,7 @@ export default function MetricsDashboard() {
         params.append('jobType', selectedType);
       }
 
-      const res = await fetch(`${API_URL}/api/metrics/dashboard?${params}`, {
+      const res = await fetch(`${API_BASE_URL}/api/metrics/dashboard?${params}`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
@@ -176,22 +177,22 @@ export default function MetricsDashboard() {
       </div>
 
       {/* Key KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
           <p className="text-sm font-medium text-blue-600">Pipeline Size</p>
-          <p className="text-2xl font-bold text-blue-900">{pipelineTotals.toFixed(0)} SQs</p>
-          <p className="text-xs text-blue-700 mt-1">Current queue</p>
+          <p className="text-2xl font-bold text-blue-900">{pipelineTotals.toFixed(0)}</p>
+          <p className="text-xs text-blue-700 mt-1">SQs in queue</p>
         </div>
 
-        <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+        <div className={`bg-green-50 p-4 rounded-lg border border-green-200`}>
           <p className="text-sm font-medium text-green-600">Lead Time</p>
-          <p className="text-2xl font-bold text-green-900">{avgLeadTime} days</p>
-          <p className="text-xs text-green-700 mt-1">Average completion</p>
+          <p className="text-2xl font-bold text-green-900">{Math.round(avgLeadTime / 7)}w {avgLeadTime % 7}d</p>
+          <p className="text-xs text-green-700 mt-1">{getLeadTimeStatus(Math.round(avgLeadTime / 7))} status</p>
         </div>
 
         <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
           <p className="text-sm font-medium text-purple-600">Revenue Projected</p>
-          <p className="text-2xl font-bold text-purple-900">${(revenueTotals / 1000000).toFixed(1)}M</p>
+          <p className="text-2xl font-bold text-purple-900">${(revenueTotals).toFixed(0)}</p>
           <p className="text-xs text-purple-700 mt-1">Period forecast</p>
         </div>
 
@@ -286,7 +287,8 @@ export default function MetricsDashboard() {
                     <th className="px-4 py-3 text-right font-medium text-gray-700">Pipeline</th>
                     <th className="px-4 py-3 text-right font-medium text-gray-700">Sales Fcst</th>
                     <th className="px-4 py-3 text-right font-medium text-gray-700">Production</th>
-                    <th className="px-4 py-3 text-right font-medium text-gray-700">Queue Growth</th>
+                    <th className="px-4 py-3 text-center font-medium text-gray-700">Crews</th>
+                    <th className="px-4 py-3 text-center font-medium text-gray-700">Leads/Sups</th>
                     <th className="px-4 py-3 text-right font-medium text-gray-700">Lead Time</th>
                     <th className="px-4 py-3 text-right font-medium text-gray-700">Utilization</th>
                     <th className="px-4 py-3 text-center font-medium text-gray-700">Status</th>
@@ -295,43 +297,54 @@ export default function MetricsDashboard() {
                 <tbody className="divide-y divide-gray-200">
                   {metrics
                     .sort((a, b) => new Date(a.metric_week).getTime() - new Date(b.metric_week).getTime())
-                    .map((m, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium text-gray-900">
-                          {new Date(m.metric_week).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                            m.job_type === 'shingle'
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {m.job_type}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right text-gray-900">{m.pipeline_sqs.toFixed(0)}</td>
-                        <td className="px-4 py-3 text-right text-gray-900">{m.sales_forecast_sqs.toFixed(0)}</td>
-                        <td className="px-4 py-3 text-right text-gray-900">{m.production_rate_sqs.toFixed(0)}</td>
-                        <td className={`px-4 py-3 text-right font-medium ${
-                          m.queue_growth > 0 ? 'text-red-600' : 'text-green-600'
-                        }`}>
-                          {m.queue_growth > 0 ? '+' : ''}{m.queue_growth.toFixed(0)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-gray-900">{m.avg_lead_time_days} days</td>
-                        <td className="px-4 py-3 text-right text-gray-900">{(m.capacity_utilization * 100).toFixed(1)}%</td>
-                        <td className="px-4 py-3 text-center">
-                          {m.bottleneck_detected ? (
-                            <span className="inline-block px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-semibold">
-                              ⚠️ Bottleneck
+                    .map((m, idx) => {
+                      const leadTimeWeeks = Math.round(m.avg_lead_time_days / 7);
+                      const leadTimeStatus = m.leadTimeStatus || getLeadTimeStatus(leadTimeWeeks);
+                      const colorClass = getLeadTimeColorClass(leadTimeStatus);
+
+                      return (
+                        <tr key={idx} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-medium text-gray-900">
+                            {new Date(m.metric_week).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                              m.job_type === 'shingle'
+                                ? 'bg-cyan-100 text-cyan-800'
+                                : 'bg-pink-100 text-pink-800'
+                            }`}>
+                              {m.job_type}
                             </span>
-                          ) : (
-                            <span className="inline-block px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-semibold">
-                              ✓ Normal
+                          </td>
+                          <td className="px-4 py-3 text-right text-gray-900">{m.pipeline_sqs.toFixed(0)}</td>
+                          <td className="px-4 py-3 text-right text-gray-900">{m.sales_forecast_sqs.toFixed(0)}</td>
+                          <td className="px-4 py-3 text-right text-gray-900">{m.production_rate_sqs.toFixed(0)}</td>
+                          <td className="px-4 py-3 text-center font-semibold text-gray-900">
+                            {m.crewCount || '-'}
+                          </td>
+                          <td className="px-4 py-3 text-center text-gray-900">
+                            <span className="text-xs">{m.totalLeads || 0} L / {m.totalSupervisors || 0} S</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-1 rounded text-xs font-semibold text-center block ${colorClass}`}>
+                              {leadTimeWeeks}w {m.avg_lead_time_days % 7}d
                             </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="px-4 py-3 text-right text-gray-900">{(m.capacity_utilization * 100).toFixed(1)}%</td>
+                          <td className="px-4 py-3 text-center">
+                            {m.bottleneck_detected ? (
+                              <span className="inline-block px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-semibold">
+                                ⚠️ Bottleneck
+                              </span>
+                            ) : (
+                              <span className="inline-block px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-semibold">
+                                ✓ Normal
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>

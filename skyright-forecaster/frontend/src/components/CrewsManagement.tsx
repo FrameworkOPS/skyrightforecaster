@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
+import { API_BASE_URL } from '../utils/apiConfig';
 
 interface Crew {
   id: string;
@@ -47,7 +48,7 @@ export default function CrewsManagement() {
   const loadCrews = async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:5001/api/crews?active=true', {
+      const res = await fetch(`${API_BASE_URL}/api/crews?active=true`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
@@ -64,7 +65,7 @@ export default function CrewsManagement() {
 
   const handleSaveCrew = async () => {
     try {
-      const url = editingId ? `http://localhost:5001/api/crews/${editingId}` : 'http://localhost:5001/api/crews';
+      const url = editingId ? `${API_BASE_URL}/api/crews/${editingId}` : `${API_BASE_URL}/api/crews`;
       const method = editingId ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
@@ -98,7 +99,7 @@ export default function CrewsManagement() {
     if (!confirm('Are you sure you want to delete this crew?')) return;
 
     try {
-      const res = await fetch(`http://localhost:5001/api/crews/${crewId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/crews/${crewId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` },
       });

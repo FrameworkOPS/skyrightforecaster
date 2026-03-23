@@ -5,6 +5,7 @@ import {
   getForecastHistory,
   getForecastInsights,
   exportForecastPDF,
+  getSixMonthForecast,
 } from '../controllers/forecastController';
 import { authenticateToken, authorize } from '../middleware/auth';
 
@@ -14,6 +15,7 @@ const router = Router();
 router.use(authenticateToken);
 
 router.post('/', authorize('admin', 'manager', 'scheduler'), generateForecast);
+router.get('/six-month', getSixMonthForecast);
 router.get('/history', getForecastHistory);
 router.get('/:id/export', exportForecastPDF);
 router.get('/:id/insights', getForecastInsights);

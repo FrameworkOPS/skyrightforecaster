@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
+import { API_BASE_URL } from '../utils/apiConfig';
+import HubSpotPipelineDisplay from './HubSpotPipelineDisplay';
 
 interface SalesForecast {
   forecast_week: string;
@@ -9,7 +11,6 @@ interface SalesForecast {
   notes?: string;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
 export default function SalesForecastInput() {
   const { token } = useAuthStore();
@@ -63,7 +64,7 @@ export default function SalesForecastInput() {
       if (start) params.append('startWeek', start);
       if (end) params.append('endWeek', end);
 
-      const res = await fetch(`${API_URL}/api/sales-forecast?${params}`, {
+      const res = await fetch(`${API_BASE_URL}/api/sales-forecast?${params}`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
@@ -89,7 +90,7 @@ export default function SalesForecastInput() {
         notes: formData.notes || null,
       };
 
-      const res = await fetch(`${API_URL}/api/sales-forecast`, {
+      const res = await fetch(`${API_BASE_URL}/api/sales-forecast`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -118,7 +119,7 @@ export default function SalesForecastInput() {
 
   const handleCopyPreviousWeek = async (fromWeek: string, toWeek: string, jobType: string) => {
     try {
-      const res = await fetch(`${API_URL}/api/sales-forecast/copy-week`, {
+      const res = await fetch(`${API_BASE_URL}/api/sales-forecast/copy-week`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -192,6 +193,9 @@ export default function SalesForecastInput() {
           </button>
         </div>
       )}
+
+      {/* HubSpot Pipeline */}
+      <HubSpotPipelineDisplay />
 
       {/* Week Range Selector */}
       <div className="bg-white p-4 rounded-lg border border-gray-200">
