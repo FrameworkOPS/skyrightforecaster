@@ -227,18 +227,6 @@ export default function CrewsManagement() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Terminate Date</label>
-              <input
-                type="date"
-                value={formData.terminate_date || ''}
-                onChange={(e) =>
-                  setFormData({ ...formData, terminate_date: e.target.value || undefined })
-                }
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-              />
-            </div>
-
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700">
                 Revenue per Sq ($) *

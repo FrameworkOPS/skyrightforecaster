@@ -40,26 +40,11 @@ export default function MetricsDashboard() {
   const { token } = useAuthStore();
   const [metrics, setMetrics] = useState<MetricsSnapshot[]>([]);
   const [loading, setLoading] = useState(false);
-  const [startWeek, setStartWeek] = useState('');
-  const [endWeek, setEndWeek] = useState('');
   const [selectedType, setSelectedType] = useState<'shingle' | 'metal' | 'all'>('all');
 
   useEffect(() => {
-    // Initialize 12-week range
-    const today = new Date();
-    const start = getMonday(today);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 84); // 12 weeks
-
-    setStartWeek(formatDate(start));
-    setEndWeek(formatDate(end));
-  }, []);
-
-  useEffect(() => {
-    if (startWeek && endWeek) {
-      loadMetrics();
-    }
-  }, [startWeek, endWeek, selectedType]);
+    loadMetrics();
+  }, [selectedType]);
 
   const getMonday = (date: Date): Date => {
     const d = new Date(date);
@@ -75,9 +60,15 @@ export default function MetricsDashboard() {
   const loadMetrics = async () => {
     setLoading(true);
     try {
+      // Calculate 12-week range automatically
+      const today = new Date();
+      const start = getMonday(today);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 84); // 12 weeks
+
       const params = new URLSearchParams();
-      params.append('startWeek', startWeek);
-      params.append('endWeek', endWeek);
+      params.append('startWeek', formatDate(start));
+      params.append('endWeek', formatDate(end));
       if (selectedType !== 'all') {
         params.append('jobType', selectedType);
       }
@@ -144,40 +135,38 @@ export default function MetricsDashboard() {
         </div>
       )}
 
-      {/* Week Range & Filters */}
-      <div className="bg-white p-4 rounded-lg border border-gray-200 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Start Week</label>
-            <input
-              type="date"
-              value={startWeek}
-              onChange={(e) => setStartWeek(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">End Week</label>
-            <input
-              type="date"
-              value={endWeek}
-              onChange={(e) => setEndWeek(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Job Type</label>
-            <select
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value as 'shingle' | 'metal' | 'all')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-            >
-              <option value="all">All Types (Combined)</option>
-              <option value="shingle">Shingle Only</option>
-              <option value="metal">Metal Only</option>
-            </select>
-          </div>
-        </div>
+      {/* Job Type Filter */}
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={() => setSelectedType('all')}
+          className={`px-4 py-2 rounded-lg font-medium transition ${
+            selectedType === 'all'
+              ? 'bg-blue-500 text-white'
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          }`}
+        >
+          All Types
+        </button>
+        <button
+          onClick={() => setSelectedType('shingle')}
+          className={`px-4 py-2 rounded-lg font-medium transition ${
+            selectedType === 'shingle'
+              ? 'bg-cyan-500 text-white'
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          }`}
+        >
+          Shingles
+        </button>
+        <button
+          onClick={() => setSelectedType('metal')}
+          className={`px-4 py-2 rounded-lg font-medium transition ${
+            selectedType === 'metal'
+              ? 'bg-pink-500 text-white'
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          }`}
+        >
+          Metal
+        </button>
       </div>
 
       {/* Key KPIs */}

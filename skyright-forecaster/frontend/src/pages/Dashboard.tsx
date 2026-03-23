@@ -30,7 +30,7 @@ type TabType = 'forecasts' | 'crews' | 'projects' | 'pipeline' | 'sales' | 'metr
 
 export default function Dashboard() {
   const { user, token } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<TabType>('forecasts');
+  const [activeTab, setActiveTab] = useState<TabType>('metrics');
   const [parameters, setParameters] = useState<Parameters | null>(null);
   const [forecasts, setForecasts] = useState<Forecast[]>([]);
   const [loading, setLoading] = useState(false);
