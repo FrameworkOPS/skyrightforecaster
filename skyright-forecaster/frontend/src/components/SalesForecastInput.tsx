@@ -81,14 +81,24 @@ export default function SalesForecastInput() {
 
   const handleSave = async (week: string, jobType: string) => {
     setError(null);
+
+    // Validate input
+    const sqValue = parseFloat(formData.projectedSquareFootage);
+    if (!formData.projectedSquareFootage || isNaN(sqValue) || sqValue <= 0) {
+      setError('Please enter a valid square footage value');
+      return;
+    }
+
     try {
       const payload = {
         forecastWeek: week,
         jobType: jobType,
-        projectedSquareFootage: parseFloat(formData.projectedSquareFootage),
+        projectedSquareFootage: sqValue,
         projectedJobCount: parseInt(formData.projectedJobCount) || 0,
         notes: formData.notes || null,
       };
+
+      console.log('Saving forecast payload:', payload);
 
       const res = await fetch(`${API_BASE_URL}/api/sales-forecast`, {
         method: 'POST',
@@ -99,14 +109,17 @@ export default function SalesForecastInput() {
         body: JSON.stringify(payload),
       });
 
+      console.log('API response status:', res.status);
+      const responseData = await res.json();
+      console.log('API response data:', responseData);
+
       if (res.ok) {
         setEditingWeek(null);
         setEditingType(null);
         setFormData({ projectedSquareFootage: '', projectedJobCount: '', notes: '' });
         await loadForecasts(startWeek, endWeek);
       } else {
-        const errorData = await res.json();
-        const errorMsg = errorData.message || `Failed to save forecast (${res.status})`;
+        const errorMsg = responseData.message || `Failed to save forecast (${res.status})`;
         setError(errorMsg);
         console.error('Error saving forecast:', errorMsg);
       }
