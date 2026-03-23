@@ -124,8 +124,49 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
   }
 
   try {
-    // For now, return mock HubSpot deals if HubSpot service is not configured
-    // In production, you would fetch from HubSpot API via HubSpotService
+    const clientId = process.env.HUBSPOT_CLIENT_ID;
+    const hubspotAccessToken = process.env.HUBSPOT_ACCESS_TOKEN;
+
+    // If HubSpot is configured, try to fetch real deals
+    if (clientId && hubspotAccessToken) {
+      try {
+        const hubspotService = new HubSpotService(hubspotAccessToken);
+        const hubspotDeals = await hubspotService.fetchPendingJobs(50);
+
+        const deals = hubspotDeals.map((deal: any) => {
+          const amount = deal.properties?.amount ? parseFloat(deal.properties.amount) : 0;
+          const jobType = deal.properties?.dealstage?.includes('metal') ? 'metal' : 'shingle';
+
+          return {
+            hubspot_id: deal.id,
+            dealname: deal.properties?.dealname || 'Unnamed Deal',
+            amount,
+            inferred_job_type: jobType,
+            weighted_value: amount * CLOSING_RATE * (jobType === 'metal' ? CREW_TYPE_RATIOS.metal : CREW_TYPE_RATIOS.shingles),
+            estimated_sqs: (amount * CLOSING_RATE * (jobType === 'metal' ? CREW_TYPE_RATIOS.metal : CREW_TYPE_RATIOS.shingles)) / (jobType === 'metal' ? REVENUE_PER_SQ.metal : REVENUE_PER_SQ.shingles),
+          };
+        });
+
+        const totalWeightedValue = deals.reduce((sum: number, d: any) => sum + d.weighted_value, 0);
+        const totalWeightedSqs = deals.reduce((sum: number, d: any) => sum + d.estimated_sqs, 0);
+
+        return res.json({
+          success: true,
+          data: {
+            deals,
+            totalWeightedValue,
+            totalWeightedSqs,
+            message: 'HubSpot pipeline summary (live data)',
+            source: 'HubSpot API',
+          },
+        });
+      } catch (hubspotError) {
+        console.error('Failed to fetch from HubSpot API, falling back to mock data:', hubspotError);
+        // Fall through to mock data below
+      }
+    }
+
+    // Return mock HubSpot deals if HubSpot service is not configured or API call failed
     const mockDeals = [
       {
         hubspot_id: 'deal-1',
@@ -162,7 +203,8 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
         deals: mockDeals,
         totalWeightedValue,
         totalWeightedSqs,
-        message: 'HubSpot pipeline summary (mock data)',
+        message: 'HubSpot pipeline summary (mock data - configure real credentials to use live data)',
+        source: 'Mock Data',
       },
     });
   } catch (error) {
