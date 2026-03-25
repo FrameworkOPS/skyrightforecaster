@@ -33,6 +33,8 @@ export default function PipelineTracker() {
   const { token } = useAuthStore();
   const [summary, setSummary] = useState<PipelineSummary | null>(null);
   const [loading, setLoading] = useState(false);
+  const [savingPipeline, setSavingPipeline] = useState(false);
+  const [pipelineError, setPipelineError] = useState<string | null>(null);
   const [showPipelineForm, setShowPipelineForm] = useState(false);
   const [showCrewForm, setShowCrewForm] = useState(false);
   const [crews, setCrews] = useState<CrewCapacity[]>([]);
@@ -86,16 +88,108 @@ export default function PipelineTracker() {
     }
   };
 
+  const MANUAL_NOTE = 'Manual pipeline input';
+
   const handleSavePipeline = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSavingPipeline(true);
+    setPipelineError(null);
 
-    // For now, just store the pipeline data in state
-    // This could be extended to save to backend if needed
-    setShowPipelineForm(false);
-    setPipelineData({
-      shinglesSQS: '',
-      metalSQS: '',
-    });
+    const today = new Date().toISOString().split('T')[0];
+
+    try {
+      // Fetch existing items to find any prior manual entries to update
+      const listRes = await fetch(`${API_BASE_URL}/api/pipeline?activeOnly=true&limit=200`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const listData = listRes.ok ? await listRes.json() : { data: [] };
+      const existingItems: PipelineItem[] = listData.data || [];
+
+      const manualShingle = existingItems.find(
+        (item) => item.job_type === 'shingle' && item.notes === MANUAL_NOTE
+      );
+      const manualMetal = existingItems.find(
+        (item) => item.job_type === 'metal' && item.notes === MANUAL_NOTE
+      );
+
+      const saves: Promise<Response>[] = [];
+
+      const shingleSQs = parseFloat(pipelineData.shinglesSQS);
+      if (!isNaN(shingleSQs) && shingleSQs > 0) {
+        if (manualShingle) {
+          saves.push(
+            fetch(`${API_BASE_URL}/api/pipeline/${manualShingle.id}`, {
+              method: 'PUT',
+              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ squareFootage: shingleSQs, revenuePerSq: 600 }),
+            })
+          );
+        } else {
+          saves.push(
+            fetch(`${API_BASE_URL}/api/pipeline`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jobType: 'shingle',
+                squareFootage: shingleSQs,
+                estimatedDaysToCompletion: 5,
+                revenuePerSq: 600,
+                addedDate: today,
+                notes: MANUAL_NOTE,
+              }),
+            })
+          );
+        }
+      }
+
+      const metalSQs = parseFloat(pipelineData.metalSQS);
+      if (!isNaN(metalSQs) && metalSQs > 0) {
+        if (manualMetal) {
+          saves.push(
+            fetch(`${API_BASE_URL}/api/pipeline/${manualMetal.id}`, {
+              method: 'PUT',
+              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ squareFootage: metalSQs, revenuePerSq: 1000 }),
+            })
+          );
+        } else {
+          saves.push(
+            fetch(`${API_BASE_URL}/api/pipeline`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jobType: 'metal',
+                squareFootage: metalSQs,
+                estimatedDaysToCompletion: 7,
+                revenuePerSq: 1000,
+                addedDate: today,
+                notes: MANUAL_NOTE,
+              }),
+            })
+          );
+        }
+      }
+
+      if (saves.length === 0) {
+        setPipelineError('Please enter at least one SQ value greater than 0');
+        return;
+      }
+
+      const results = await Promise.all(saves);
+      const failed = results.find((r) => !r.ok);
+      if (failed) {
+        const errData = await failed.json().catch(() => ({}));
+        setPipelineError(errData.error || errData.message || `Failed to save pipeline (${failed.status})`);
+      } else {
+        setShowPipelineForm(false);
+        setPipelineData({ shinglesSQS: '', metalSQS: '' });
+        loadSummary();
+      }
+    } catch (err) {
+      setPipelineError(err instanceof Error ? err.message : 'An error occurred while saving');
+    } finally {
+      setSavingPipeline(false);
+    }
   };
 
   const handleAddCrew = async (e: React.FormEvent) => {
@@ -127,9 +221,31 @@ export default function PipelineTracker() {
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-900">Pipeline Tracker</h2>
         <button
-          onClick={() => {
-            setPipelineData({ shinglesSQS: '', metalSQS: '' });
-            setShowPipelineForm(!showPipelineForm);
+          onClick={async () => {
+            if (showPipelineForm) {
+              setShowPipelineForm(false);
+              setPipelineError(null);
+            } else {
+              // Pre-populate with existing manual values
+              try {
+                const res = await fetch(`${API_BASE_URL}/api/pipeline?activeOnly=true&limit=200`, {
+                  headers: { 'Authorization': `Bearer ${token}` },
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  const items: PipelineItem[] = data.data || [];
+                  const shingle = items.find(i => i.job_type === 'shingle' && i.notes === 'Manual pipeline input');
+                  const metal = items.find(i => i.job_type === 'metal' && i.notes === 'Manual pipeline input');
+                  setPipelineData({
+                    shinglesSQS: shingle ? String(shingle.square_footage) : '',
+                    metalSQS: metal ? String(metal.square_footage) : '',
+                  });
+                }
+              } catch {
+                setPipelineData({ shinglesSQS: '', metalSQS: '' });
+              }
+              setShowPipelineForm(true);
+            }
           }}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
         >
@@ -169,7 +285,14 @@ export default function PipelineTracker() {
       {/* Pipeline Input Form */}
       {showPipelineForm && (
         <div className="bg-white p-6 rounded-lg border border-gray-200 shadow">
-          <h3 className="text-lg font-semibold mb-4">Update Pipeline Inventory</h3>
+          <h3 className="text-lg font-semibold mb-2">Update Pipeline Inventory</h3>
+          <p className="text-xs text-gray-500 mb-4">Set the current SQ counts in your pipeline. Saving will update existing manual entries or create new ones.</p>
+          {pipelineError && (
+            <div className="mb-4 bg-red-50 border border-red-200 rounded p-3 flex justify-between items-start">
+              <p className="text-sm text-red-700">{pipelineError}</p>
+              <button onClick={() => setPipelineError(null)} className="text-red-500 hover:text-red-700 ml-2 text-xs underline">Dismiss</button>
+            </div>
+          )}
           <form onSubmit={handleSavePipeline} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -202,6 +325,7 @@ export default function PipelineTracker() {
                 type="button"
                 onClick={() => {
                   setShowPipelineForm(false);
+                  setPipelineError(null);
                   setPipelineData({ shinglesSQS: '', metalSQS: '' });
                 }}
                 className="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400"
@@ -210,9 +334,10 @@ export default function PipelineTracker() {
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                disabled={savingPipeline}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
-                Update Pipeline
+                {savingPipeline ? 'Saving...' : 'Update Pipeline'}
               </button>
             </div>
           </form>

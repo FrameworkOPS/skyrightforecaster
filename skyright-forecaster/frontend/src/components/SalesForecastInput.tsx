@@ -150,7 +150,7 @@ export default function SalesForecastInput() {
   };
 
   const startEditing = (week: string, jobType: string) => {
-    const existing = forecasts.find(f => f.forecast_week === week && f.job_type === jobType);
+    const existing = forecasts.find(f => f.forecast_week.substring(0, 10) === week && f.job_type === jobType);
     setFormData({
       projectedSquareFootage: existing?.projected_square_footage.toString() || '',
       projectedJobCount: existing?.projected_job_count?.toString() || '',
@@ -161,7 +161,7 @@ export default function SalesForecastInput() {
   };
 
   const getValue = (week: string, jobType: string): number => {
-    const item = forecasts.find(f => f.forecast_week === week && f.job_type === jobType);
+    const item = forecasts.find(f => f.forecast_week.substring(0, 10) === week && f.job_type === jobType);
     return item?.projected_square_footage || 0;
   };
 

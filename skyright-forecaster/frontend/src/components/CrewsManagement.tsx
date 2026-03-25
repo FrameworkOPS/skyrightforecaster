@@ -30,6 +30,8 @@ export default function CrewsManagement() {
   const { token } = useAuthStore();
   const [crews, setCrews] = useState<Crew[]>([]);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState<CrewFormData>({
@@ -64,6 +66,8 @@ export default function CrewsManagement() {
   };
 
   const handleSaveCrew = async () => {
+    setError(null);
+    setSaving(true);
     try {
       const url = editingId ? `${API_BASE_URL}/api/crews/${editingId}` : `${API_BASE_URL}/api/crews`;
       const method = editingId ? 'PUT' : 'POST';
@@ -89,9 +93,14 @@ export default function CrewsManagement() {
           revenue_per_sq: 600,
         });
         loadCrews();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || data.message || `Failed to save crew (${res.status})`);
       }
-    } catch (error) {
-      console.error('Error saving crew:', error);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred while saving');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -158,6 +167,13 @@ export default function CrewsManagement() {
           {showForm ? 'Cancel' : 'Add Crew'}
         </button>
       </div>
+
+      {error && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3 flex justify-between items-start">
+          <p className="text-sm text-red-700">{error}</p>
+          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700 ml-2 text-xs underline">Dismiss</button>
+        </div>
+      )}
 
       {showForm && (
         <div className="bg-gray-50 p-4 rounded mb-6 border border-gray-200">
@@ -250,9 +266,10 @@ export default function CrewsManagement() {
           <div className="flex gap-2 mt-4">
             <button
               onClick={handleSaveCrew}
-              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+              disabled={saving}
+              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50"
             >
-              {editingId ? 'Update' : 'Create'} Crew
+              {saving ? 'Saving...' : (editingId ? 'Update' : 'Create') + ' Crew'}
             </button>
             <button
               onClick={() => setShowForm(false)}
