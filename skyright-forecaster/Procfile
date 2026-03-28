@@ -1,1 +1,1 @@
-web: cd skyright-forecaster && npm start
+web: bash start.sh
