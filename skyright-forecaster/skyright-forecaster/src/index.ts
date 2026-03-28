@@ -26,16 +26,16 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(helmet());
 
-// CORS configuration - allow Vercel previews and localhost
-const allowedOrigins = [
-  'https://skyright-forecaster.vercel.app',
-  'http://localhost:3000',
-  'http://localhost:5173',
-  /vercel\.app$/, // Allow all Vercel deployment previews
-];
-
+// CORS configuration - allow all origins in production
 app.use(cors({
-  origin: allowedOrigins,
+  origin: function (origin, callback) {
+    // Allow requests from Vercel, localhost, or no origin (like mobile apps)
+    if (!origin || origin.includes('vercel.app') || origin.includes('localhost')) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow all for now
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
