@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useAuthStore } from '../store/authStore';
+import { API_BASE_URL } from '../utils/apiConfig';
 import CrewsManagement from '../components/CrewsManagement';
 import CustomProjectsManagement from '../components/CustomProjectsManagement';
 import PipelineTracker from '../components/PipelineTracker';
@@ -47,7 +48,7 @@ export default function Dashboard() {
     setLoading(true);
     try {
       // Load parameters
-      const paramsRes = await fetch('http://localhost:5001/api/parameters', {
+      const paramsRes = await fetch(`${API_BASE_URL}/api/parameters`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (paramsRes.ok) {
@@ -56,7 +57,7 @@ export default function Dashboard() {
       }
 
       // Load forecasts
-      const forecastsRes = await fetch('http://localhost:5001/api/forecasts/history', {
+      const forecastsRes = await fetch(`${API_BASE_URL}/api/forecasts/history`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (forecastsRes.ok) {
@@ -72,7 +73,7 @@ export default function Dashboard() {
 
   const handleParameterUpdate = async () => {
     try {
-      const res = await fetch('http://localhost:5001/api/parameters', {
+      const res = await fetch(`${API_BASE_URL}/api/parameters`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -94,7 +95,7 @@ export default function Dashboard() {
 
   const handleGenerateForecast = async () => {
     try {
-      const res = await fetch('http://localhost:5001/api/forecasts', {
+      const res = await fetch(`${API_BASE_URL}/api/forecasts`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -119,7 +120,7 @@ export default function Dashboard() {
   const handleDownloadForecast = async (forecastId: string) => {
     setDownloadingId(forecastId);
     try {
-      const res = await fetch(`http://localhost:5001/api/forecasts/${forecastId}/export`, {
+      const res = await fetch(`${API_BASE_URL}/api/forecasts/${forecastId}/export`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 

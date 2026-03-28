@@ -90,7 +90,7 @@ interface MetricsStore {
   isCacheValid(): boolean;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+import { API_BASE_URL as API_URL } from '../utils/apiConfig';
 const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 
 export const useMetricsStore = create<MetricsStore>((set, get) => ({

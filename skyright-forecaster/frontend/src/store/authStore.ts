@@ -21,7 +21,7 @@ interface AuthStore {
   checkAuth: () => void
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001'
+import { API_BASE_URL as API_URL } from '../utils/apiConfig'
 const USE_MOCK_API = import.meta.env.VITE_MOCK_API === 'true'
 
 export const useAuthStore = create<AuthStore>((set) => ({
