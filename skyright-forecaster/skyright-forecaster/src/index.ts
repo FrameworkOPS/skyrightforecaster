@@ -25,8 +25,17 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(helmet());
+
+// CORS configuration - allow Vercel previews and localhost
+const allowedOrigins = [
+  'https://skyright-forecaster.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  /vercel\.app$/, // Allow all Vercel deployment previews
+];
+
 app.use(cors({
-  origin: ['https://skyright-forecaster.vercel.app', 'https://test-theta-seven-86.vercel.app', 'http://localhost:3000', 'http://localhost:5173'],
+  origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
