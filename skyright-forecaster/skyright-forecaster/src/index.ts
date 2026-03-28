@@ -27,13 +27,14 @@ const PORT = process.env.PORT || 5000;
 app.use(helmet({ crossOriginResourcePolicy: false }));
 
 // CORS configuration - allow all origins
-app.use((req, res, next) => {
+app.use((req: Request, res: Response, next: NextFunction) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
+    res.sendStatus(200);
+    return;
   }
   next();
 });
