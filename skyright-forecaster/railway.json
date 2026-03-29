@@ -6,7 +6,7 @@
   },
   "deploy": {
     "numReplicas": 1,
-    "startCommand": "bash start.sh",
+    "startCommand": "cd skyright-forecaster && node dist/index.js",
     "restartPolicyMaxRetries": 5
   }
 }
