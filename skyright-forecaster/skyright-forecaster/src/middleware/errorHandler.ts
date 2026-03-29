@@ -29,11 +29,10 @@ export function errorHandler(
   }
 
   // Unhandled error
-  console.error('Unhandled error:', error);
+  console.error('Unhandled error:', error.message, error.stack);
   res.status(500).json({
     success: false,
-    message: 'Internal server error',
-    ...(isDevelopment && { error: error.message, stack: error.stack }),
+    message: error.message || 'Internal server error',
   });
 }
 

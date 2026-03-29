@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import { query } from '../config/database';
 import { hashPassword, comparePassword, generateToken } from '../utils/auth';
 import { AppError, asyncHandler } from '../middleware/errorHandler';
@@ -32,7 +33,6 @@ export const register = asyncHandler(async (req: Request<{}, {}, RegisterRequest
   const passwordHash = await hashPassword(password);
 
   // Create user
-  const { v4: uuidv4 } = await import('uuid');
   const userId = uuidv4();
   await query(
     `INSERT INTO users (id, email, password_hash, first_name, last_name, role)
