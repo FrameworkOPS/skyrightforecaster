@@ -47,16 +47,16 @@ export const useAuthStore = create<AuthStore>((set) => ({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password }),
         })
+        const data = await res.json()
         if (res.ok) {
-          const data = await res.json()
-          localStorage.setItem('token', data.data.token)
+          localStorage.setItem('token', data.token)
           set({
-            token: data.data.token,
-            user: data.data.user,
+            token: data.token,
+            user: data.user,
             isAuthenticated: true,
           })
         } else {
-          throw new Error('Login failed')
+          throw new Error(data.message || 'Login failed')
         }
       }
     } catch (error) {
@@ -78,18 +78,18 @@ export const useAuthStore = create<AuthStore>((set) => ({
         const res = await fetch(`${API_URL}/api/auth/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password, first_name: firstName, last_name: lastName }),
+          body: JSON.stringify({ email, password, firstName, lastName }),
         })
+        const data = await res.json()
         if (res.ok) {
-          const data = await res.json()
-          localStorage.setItem('token', data.data.token)
+          localStorage.setItem('token', data.token)
           set({
-            token: data.data.token,
-            user: data.data.user,
+            token: data.token,
+            user: data.user,
             isAuthenticated: true,
           })
         } else {
-          throw new Error('Registration failed')
+          throw new Error(data.message || 'Registration failed')
         }
       }
     } catch (error) {
