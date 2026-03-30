@@ -13,6 +13,12 @@ interface JobData {
   jobAddress?: string;
 }
 
+const parseJobRow = (row: any) => ({
+  ...row,
+  square_footage: row.square_footage != null ? parseFloat(row.square_footage) : null,
+  revenue: row.revenue != null ? parseFloat(row.revenue) : null,
+});
+
 export const getJobs = asyncHandler(async (req: Request, res: Response) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
@@ -40,7 +46,7 @@ export const getJobs = asyncHandler(async (req: Request, res: Response) => {
 
   res.json({
     success: true,
-    data: result.rows,
+    data: result.rows.map(parseJobRow),
     pagination: {
       page,
       limit,
@@ -68,7 +74,7 @@ export const createJob = asyncHandler(async (req: Request<{}, {}, JobData>, res:
   res.status(201).json({
     success: true,
     message: 'Job created successfully',
-    data: result.rows[0],
+    data: parseJobRow(result.rows[0]),
   });
 });
 
@@ -97,7 +103,7 @@ export const updateJobStatus = asyncHandler(async (req: Request<{ id: string }>,
   res.json({
     success: true,
     message: 'Job updated successfully',
-    data: result.rows[0],
+    data: parseJobRow(result.rows[0]),
   });
 });
 

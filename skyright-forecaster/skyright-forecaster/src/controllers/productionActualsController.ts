@@ -2,6 +2,12 @@ import { Request, Response } from 'express';
 import { query } from '../config/database';
 import { AppError, asyncHandler } from '../middleware/errorHandler';
 
+const parseProductionRow = (row: any) => ({
+  ...row,
+  square_footage_completed: parseFloat(row.square_footage_completed) || 0,
+  hours_worked: row.hours_worked != null ? parseFloat(row.hours_worked) : null,
+});
+
 export const createProductionActual = asyncHandler(async (req: Request, res: Response) => {
   const {
     productionWeek,
@@ -43,7 +49,7 @@ export const createProductionActual = asyncHandler(async (req: Request, res: Res
 
   res.status(201).json({
     success: true,
-    data: result.rows[0],
+    data: parseProductionRow(result.rows[0]),
     message: 'Production actual recorded successfully'
   });
 });
@@ -88,7 +94,7 @@ export const getProductionActuals = asyncHandler(async (req: Request, res: Respo
 
   res.json({
     success: true,
-    data: result.rows,
+    data: result.rows.map(parseProductionRow),
     pagination: {
       total: parseInt(countResult.rows[0].total),
       page: parseInt(page as string),
@@ -207,7 +213,7 @@ export const updateProductionActual = asyncHandler(async (req: Request, res: Res
   if (updates.length === 1) {
     return res.json({
       success: true,
-      data: existing.rows[0],
+      data: parseProductionRow(existing.rows[0]),
       message: 'No changes to apply'
     });
   }
@@ -221,7 +227,7 @@ export const updateProductionActual = asyncHandler(async (req: Request, res: Res
 
   res.json({
     success: true,
-    data: result.rows[0],
+    data: parseProductionRow(result.rows[0]),
     message: 'Production actual updated successfully'
   });
 });

@@ -309,7 +309,12 @@ export const getForecastHistory = asyncHandler(async (req: Request, res: Respons
 
   res.json({
     success: true,
-    data: result.rows,
+    data: result.rows.map((row: any) => ({
+      ...row,
+      predicted_capacity: parseFloat(row.predicted_capacity) || 0,
+      predicted_revenue: parseFloat(row.predicted_revenue) || 0,
+      confidence_score: parseFloat(row.confidence_score) || 0,
+    })),
     pagination: {
       page,
       limit,

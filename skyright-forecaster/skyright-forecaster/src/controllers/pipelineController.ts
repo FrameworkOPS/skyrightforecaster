@@ -2,6 +2,14 @@ import { Request, Response } from 'express';
 import { query } from '../config/database';
 import { AppError, asyncHandler } from '../middleware/errorHandler';
 
+const parsePipelineRow = (row: any) => ({
+  ...row,
+  square_footage: parseFloat(row.square_footage) || 0,
+  revenue_per_sq: parseFloat(row.revenue_per_sq) || 0,
+  total_revenue: parseFloat(row.total_revenue) || 0,
+  estimated_days_to_completion: parseInt(row.estimated_days_to_completion) || 0,
+});
+
 export const getPipelineItems = asyncHandler(async (req: Request, res: Response) => {
   const { jobType, status, activeOnly = true, page = 1, limit = 50 } = req.query;
 
@@ -38,17 +46,9 @@ export const getPipelineItems = asyncHandler(async (req: Request, res: Response)
     params
   );
 
-  const parseRow = (row: any) => ({
-    ...row,
-    square_footage: parseFloat(row.square_footage) || 0,
-    revenue_per_sq: parseFloat(row.revenue_per_sq) || 0,
-    total_revenue: parseFloat(row.total_revenue) || 0,
-    estimated_days_to_completion: parseInt(row.estimated_days_to_completion) || 0,
-  });
-
   res.json({
     success: true,
-    data: result.rows.map(parseRow),
+    data: result.rows.map(parsePipelineRow),
     pagination: {
       total: parseInt(countResult.rows[0].total),
       page: parseInt(page as string),
@@ -72,7 +72,7 @@ export const getPipelineItem = asyncHandler(async (req: Request, res: Response) 
 
   res.json({
     success: true,
-    data: result.rows[0]
+    data: parsePipelineRow(result.rows[0])
   });
 });
 
@@ -109,7 +109,7 @@ export const createPipelineItem = asyncHandler(async (req: Request, res: Respons
 
   res.status(201).json({
     success: true,
-    data: result.rows[0],
+    data: parsePipelineRow(result.rows[0]),
     message: 'Pipeline item created successfully'
   });
 });
@@ -215,7 +215,7 @@ export const updatePipelineItem = asyncHandler(async (req: Request, res: Respons
     // Only updated_at was added
     return res.json({
       success: true,
-      data: existing.rows[0],
+      data: parsePipelineRow(existing.rows[0]),
       message: 'No changes to apply'
     });
   }
@@ -229,7 +229,7 @@ export const updatePipelineItem = asyncHandler(async (req: Request, res: Respons
 
   res.json({
     success: true,
-    data: result.rows[0],
+    data: parsePipelineRow(result.rows[0]),
     message: 'Pipeline item updated successfully'
   });
 });
@@ -249,7 +249,7 @@ export const deletePipelineItem = asyncHandler(async (req: Request, res: Respons
 
   res.json({
     success: true,
-    data: result.rows[0],
+    data: parsePipelineRow(result.rows[0]),
     message: 'Pipeline item deleted successfully'
   });
 });
@@ -304,7 +304,16 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
   res.json({
     success: true,
     data: {
-      byType: result.rows,
+      byType: result.rows.map((row: any) => ({
+        ...row,
+        job_count: parseInt(row.job_count) || 0,
+        total_sqs: parseFloat(row.total_sqs) || 0,
+        total_revenue: parseFloat(row.total_revenue) || 0,
+        avg_duration_days: parseFloat(row.avg_duration_days) || 0,
+        pending_count: parseInt(row.pending_count) || 0,
+        in_queue_count: parseInt(row.in_queue_count) || 0,
+        in_progress_count: parseInt(row.in_progress_count) || 0,
+      })),
       combined
     }
   });
