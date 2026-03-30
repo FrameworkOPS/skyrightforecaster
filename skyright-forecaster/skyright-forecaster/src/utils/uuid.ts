@@ -1,8 +1,5 @@
-let uuidModule: any = null;
+import { randomUUID } from 'crypto';
 
 export async function getUUID(): Promise<string> {
-  if (!uuidModule) {
-    uuidModule = await import('uuid');
-  }
-  return uuidModule.v4();
+  return randomUUID();
 }
