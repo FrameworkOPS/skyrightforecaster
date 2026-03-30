@@ -246,7 +246,7 @@ export async function initializeDatabase(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_sales_forecast_week_type ON sales_forecast(forecast_week, job_type);
       CREATE INDEX IF NOT EXISTS idx_crew_staff_crew_id ON crew_staff(crew_id);
       CREATE INDEX IF NOT EXISTS idx_production_actuals_week_type ON production_actuals(production_week, job_type);
-      CREATE INDEX IF NOT EXISTS idx_metrics_snapshots_week_type ON metrics_snapshots(metric_week, job_type);
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_metrics_snapshots_week_type ON metrics_snapshots(metric_week, job_type);
     `);
 
     // Seed default production parameters if none exist

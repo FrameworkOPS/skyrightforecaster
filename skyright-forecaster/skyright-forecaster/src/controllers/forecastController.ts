@@ -144,8 +144,9 @@ export const generateForecast = asyncHandler(async (req: Request<{}, {}, Forecas
     }
 
     // Simplified forecast logic with crew capacity
-    const productionRate = params.current_production_rate * params.seasonal_adjustment;
-    let predictedCapacity = Math.ceil((params.crew_capacity / avgCrewSize) * productionRate);
+    const productionRate = parseFloat(params.current_production_rate) * parseFloat(params.seasonal_adjustment);
+    const safeAvgCrewSize = avgCrewSize > 0 ? avgCrewSize : 1;
+    let predictedCapacity = Math.ceil((parseFloat(params.crew_capacity) / safeAvgCrewSize) * productionRate) || 0;
 
     // Apply crew multipliers to predicted capacity
     let totalCrewMultiplier = 1.0;
@@ -170,7 +171,7 @@ export const generateForecast = asyncHandler(async (req: Request<{}, {}, Forecas
       predictedCapacity = Math.ceil(predictedCapacity * totalCrewMultiplier);
     }
 
-    const bottleneckDetected = totalJobs > params.max_concurrent_jobs || totalCrewMultiplier < 0.5;
+    const bottleneckDetected = totalJobs > parseInt(params.max_concurrent_jobs) || totalCrewMultiplier < 0.5;
 
     const forecastId = await getUUID();
 
