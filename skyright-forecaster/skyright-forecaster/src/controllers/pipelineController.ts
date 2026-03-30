@@ -38,9 +38,17 @@ export const getPipelineItems = asyncHandler(async (req: Request, res: Response)
     params
   );
 
+  const parseRow = (row: any) => ({
+    ...row,
+    square_footage: parseFloat(row.square_footage) || 0,
+    revenue_per_sq: parseFloat(row.revenue_per_sq) || 0,
+    total_revenue: parseFloat(row.total_revenue) || 0,
+    estimated_days_to_completion: parseInt(row.estimated_days_to_completion) || 0,
+  });
+
   res.json({
     success: true,
-    data: result.rows,
+    data: result.rows.map(parseRow),
     pagination: {
       total: parseInt(countResult.rows[0].total),
       page: parseInt(page as string),

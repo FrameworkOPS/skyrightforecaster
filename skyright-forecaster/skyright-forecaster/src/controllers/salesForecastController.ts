@@ -42,7 +42,11 @@ export const getSalesForecasts = asyncHandler(async (req: Request, res: Response
 
   res.json({
     success: true,
-    data: result.rows,
+    data: result.rows.map((row: any) => ({
+      ...row,
+      projected_square_footage: parseFloat(row.projected_square_footage) || 0,
+      projected_job_count: parseInt(row.projected_job_count) || 0,
+    })),
     pagination: {
       total: parseInt(countResult.rows[0].total),
       page: parseInt(page as string),
@@ -79,9 +83,14 @@ export const getSalesForecast = asyncHandler(async (req: Request, res: Response)
     });
   }
 
+  const row = result.rows[0];
   res.json({
     success: true,
-    data: result.rows[0]
+    data: {
+      ...row,
+      projected_square_footage: parseFloat(row.projected_square_footage) || 0,
+      projected_job_count: parseInt(row.projected_job_count) || 0,
+    }
   });
 });
 
@@ -109,9 +118,14 @@ export const createOrUpdateSalesForecast = asyncHandler(async (req: Request, res
       [forecastWeek, jobType, projectedSquareFootage, projectedJobCount || 0, notes || null, req.user?.id || null]
     );
 
+    const saved = result.rows[0];
     res.status(201).json({
       success: true,
-      data: result.rows[0],
+      data: {
+        ...saved,
+        projected_square_footage: parseFloat(saved.projected_square_footage) || 0,
+        projected_job_count: parseInt(saved.projected_job_count) || 0,
+      },
       message: 'Sales forecast created/updated successfully'
     });
   } catch (error) {
@@ -154,9 +168,14 @@ export const copyPreviousWeek = asyncHandler(async (req: Request, res: Response)
     [toWeek, jobType, sourceData.projected_square_footage, sourceData.projected_job_count, sourceData.notes, req.user?.id || null]
   );
 
+  const copied = result.rows[0];
   res.json({
     success: true,
-    data: result.rows[0],
+    data: {
+      ...copied,
+      projected_square_footage: parseFloat(copied.projected_square_footage) || 0,
+      projected_job_count: parseInt(copied.projected_job_count) || 0,
+    },
     message: `Forecast copied from week ${fromWeek} to ${toWeek} for ${jobType}`
   });
 });
