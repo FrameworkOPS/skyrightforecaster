@@ -80,7 +80,31 @@ export default function MetricsDashboard() {
 
       if (res.ok) {
         const data = await res.json();
-        setMetrics(data.data || []);
+        const metricsData = data.data || [];
+        setMetrics(metricsData);
+
+        // Auto-calculate metrics for current week if no data exists yet
+        if (metricsData.length === 0) {
+          const weekStr = formatDate(start);
+          await Promise.all([
+            fetch(`${API_BASE_URL}/api/metrics/calculate?week=${weekStr}&jobType=shingle`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}` },
+            }),
+            fetch(`${API_BASE_URL}/api/metrics/calculate?week=${weekStr}&jobType=metal`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}` },
+            }),
+          ]);
+          // Reload after calculation
+          const res2 = await fetch(`${API_BASE_URL}/api/metrics/dashboard?${params}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+          });
+          if (res2.ok) {
+            const data2 = await res2.json();
+            setMetrics(data2.data || []);
+          }
+        }
       }
     } catch (error) {
       console.error('Error loading metrics:', error);

@@ -81,7 +81,16 @@ export default function PipelineTracker() {
 
       if (res.ok) {
         const data = await res.json();
-        setSummary(data.data);
+        const summaryData = data.data || {};
+        const byType: any[] = summaryData.byType || [];
+        const shinglesRow = byType.find((r: any) => r.job_type === 'shingle');
+        const metalRow = byType.find((r: any) => r.job_type === 'metal');
+        const combined = summaryData.combined || {};
+        setSummary({
+          shingles: shinglesRow ? { totalSQs: shinglesRow.total_sqs, jobCount: shinglesRow.job_count } : undefined,
+          metal: metalRow ? { totalSQs: metalRow.total_sqs, jobCount: metalRow.job_count } : undefined,
+          combined: { totalSQs: combined.total_sqs || 0, jobCount: combined.job_count || 0 },
+        });
       }
     } catch (error) {
       console.error('Error loading summary:', error);

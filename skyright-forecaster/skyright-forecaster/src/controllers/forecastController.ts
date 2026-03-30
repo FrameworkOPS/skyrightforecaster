@@ -516,77 +516,89 @@ export const getSixMonthForecast = asyncHandler(async (req: Request, res: Respon
   const mondayStart = new Date(startDate);
   mondayStart.setDate(mondayStart.getDate() - (startDate.getDay() || 7) + 1);
 
+  // Get total current pipeline per type (same snapshot for all weeks)
+  const pipelineResult = await query(
+    `SELECT job_type, COALESCE(SUM(square_footage), 0) as total_sqs
+     FROM pipeline_items
+     WHERE is_active = true AND status != 'completed'
+     GROUP BY job_type`
+  );
+  const pipelineByType: { [key: string]: number } = {};
+  pipelineResult.rows.forEach((row: any) => {
+    pipelineByType[row.job_type] = parseFloat(row.total_sqs) || 0;
+  });
+
+  // Get all active crews
+  const crewsResult = await query(
+    `SELECT id, crew_name, crew_type, training_period_days, start_date, terminate_date
+     FROM crews WHERE is_active = true ORDER BY crew_type, crew_name`
+  );
+  const allCrews = crewsResult.rows;
+
+  const CREW_BASE_CAPACITY = 1000; // SQs per week per crew at full capacity
+
   // Generate 26 weeks of forecast
   for (let i = 0; i < 26; i++) {
     const weekDate = new Date(mondayStart);
     weekDate.setDate(weekDate.getDate() + i * 7);
     const weekStr = weekDate.toISOString().split('T')[0];
 
-    // Get metrics for this week
-    const metricsResult = await query(
-      `SELECT * FROM metrics_snapshots
-       WHERE metric_week = $1
-       ORDER BY job_type`,
+    // Get sales forecast for this week
+    const salesResult = await query(
+      `SELECT job_type, COALESCE(projected_square_footage, 0) as sqs
+       FROM sales_forecast WHERE forecast_week = $1`,
       [weekStr]
     );
+    const salesByType: { [key: string]: number } = {};
+    salesResult.rows.forEach((row: any) => {
+      salesByType[row.job_type] = parseFloat(row.sqs) || 0;
+    });
 
-    let pipelineSqsShingles = 0;
-    let pipelineSqsMetal = 0;
-    let productionRateShingles = 0;
-    let productionRateMetal = 0;
-    let salesForecastShingles = 0;
-    let salesForecastMetal = 0;
-    let avgLeadTimeWeeks = 0;
-
-    for (const metric of metricsResult.rows) {
-      if (metric.job_type === 'shingle') {
-        pipelineSqsShingles = parseFloat(metric.pipeline_sqs) || 0;
-        productionRateShingles = parseFloat(metric.production_rate_sqs) || 0;
-        salesForecastShingles = parseFloat(metric.sales_forecast_sqs) || 0;
-      } else {
-        pipelineSqsMetal = parseFloat(metric.pipeline_sqs) || 0;
-        productionRateMetal = parseFloat(metric.production_rate_sqs) || 0;
-        salesForecastMetal = parseFloat(metric.sales_forecast_sqs) || 0;
+    // Calculate effective production rate per type from active crews
+    const productionByType: { [key: string]: number } = { shingle: 0, metal: 0 };
+    for (const crew of allCrews) {
+      const daysElapsed = daysBetween(crew.start_date, weekStr);
+      const rampUp = calculateCrewRampUpMultiplier(
+        crew.crew_type as 'shingle' | 'metal',
+        daysElapsed,
+        parseInt(crew.training_period_days)
+      );
+      let rampDown = 1.0;
+      if (crew.terminate_date) {
+        rampDown = calculateCrewRampDownMultiplier(crew.terminate_date, weekDate);
       }
-      avgLeadTimeWeeks = Math.max(avgLeadTimeWeeks, Math.round(metric.avg_lead_time_days / 7));
+      productionByType[crew.crew_type] = (productionByType[crew.crew_type] || 0) + CREW_BASE_CAPACITY * rampUp * rampDown;
     }
+
+    // Lead time: pipeline SQs / weekly production rate
+    const shingleLeadWeeks = productionByType.shingle > 0
+      ? (pipelineByType.shingle || 0) / productionByType.shingle
+      : 0;
+    const metalLeadWeeks = productionByType.metal > 0
+      ? (pipelineByType.metal || 0) / productionByType.metal
+      : 0;
+    const avgLeadTimeWeeks = Math.round(Math.max(shingleLeadWeeks, metalLeadWeeks));
 
     // Get crew changes for this week
     const crewAddResult = await query(
-      `SELECT id, crew_name, crew_type FROM crews
-       WHERE start_date = $1::date`,
+      `SELECT crew_name, crew_type FROM crews WHERE start_date = $1::date`,
       [weekStr]
     );
-
     const crewRemoveResult = await query(
-      `SELECT id, crew_name, crew_type FROM crews
-       WHERE terminate_date = $1::date`,
+      `SELECT crew_name, crew_type FROM crews WHERE terminate_date = $1::date`,
       [weekStr]
     );
-
     const crewChanges = [
-      ...crewAddResult.rows.map((c: any) => ({
-        type: 'added' as const,
-        crew_name: c.crew_name,
-        crew_type: c.crew_type,
-        date: weekStr,
-      })),
-      ...crewRemoveResult.rows.map((c: any) => ({
-        type: 'removed' as const,
-        crew_name: c.crew_name,
-        crew_type: c.crew_type,
-        date: weekStr,
-      })),
+      ...crewAddResult.rows.map((c: any) => ({ type: 'added' as const, crew_name: c.crew_name, crew_type: c.crew_type, date: weekStr })),
+      ...crewRemoveResult.rows.map((c: any) => ({ type: 'removed' as const, crew_name: c.crew_name, crew_type: c.crew_type, date: weekStr })),
     ];
 
     // Get custom projects for this week
     const projectsResult = await query(
       `SELECT project_name, start_date, end_date FROM custom_projects
-       WHERE is_active = true
-       AND start_date <= $1::date AND end_date >= $2::date`,
+       WHERE is_active = true AND start_date <= $1::date AND end_date >= $2::date`,
       [weekStr, weekStr]
     );
-
     const customProjects = projectsResult.rows.map((p: any) => ({
       name: p.project_name,
       start_date: p.start_date,
@@ -595,12 +607,12 @@ export const getSixMonthForecast = asyncHandler(async (req: Request, res: Respon
 
     weeks.push({
       week: weekStr,
-      pipeline_sqs_shingles: pipelineSqsShingles,
-      pipeline_sqs_metal: pipelineSqsMetal,
-      production_rate_shingles: productionRateShingles,
-      production_rate_metal: productionRateMetal,
-      sales_forecast_shingles: salesForecastShingles,
-      sales_forecast_metal: salesForecastMetal,
+      pipeline_sqs_shingles: pipelineByType.shingle || 0,
+      pipeline_sqs_metal: pipelineByType.metal || 0,
+      production_rate_shingles: Math.round(productionByType.shingle),
+      production_rate_metal: Math.round(productionByType.metal),
+      sales_forecast_shingles: salesByType.shingle || 0,
+      sales_forecast_metal: salesByType.metal || 0,
       avg_lead_time_weeks: avgLeadTimeWeeks,
       crew_changes: crewChanges,
       custom_projects: customProjects,

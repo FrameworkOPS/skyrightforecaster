@@ -252,7 +252,7 @@ export default function Dashboard() {
           <>
             {/* Key Metrics */}
             {parameters && (
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
                 <div className="bg-white rounded-lg shadow p-6">
                   <p className="text-gray-600 text-sm">Production Rate</p>
                   <p className="text-3xl font-bold text-blue-600">{parameters.currentProductionRate}</p>
@@ -263,20 +263,6 @@ export default function Dashboard() {
                   <p className="text-gray-600 text-sm">Crew Capacity</p>
                   <p className="text-3xl font-bold text-green-600">{parameters.crewCapacity}</p>
                   <p className="text-gray-500 text-xs mt-2">team members</p>
-                </div>
-
-                <div className="bg-white rounded-lg shadow p-6">
-                  <p className="text-gray-600 text-sm">Max Concurrent</p>
-                  <p className="text-3xl font-bold text-purple-600">{parameters.maxConcurrentJobs}</p>
-                  <p className="text-gray-500 text-xs mt-2">jobs</p>
-                </div>
-
-                <div className="bg-white rounded-lg shadow p-6">
-                  <p className="text-gray-600 text-sm">Seasonal Adj</p>
-                  <p className="text-3xl font-bold text-orange-600">
-                    {(parameters.seasonalAdjustment * 100).toFixed(0)}%
-                  </p>
-                  <p className="text-gray-500 text-xs mt-2">multiplier</p>
                 </div>
               </div>
             )}
@@ -333,36 +319,6 @@ export default function Dashboard() {
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Max Concurrent Jobs</label>
-                    <input
-                      type="number"
-                      value={newParameters.maxConcurrentJobs || 0}
-                      onChange={(e) =>
-                        setNewParameters({
-                          ...newParameters,
-                          maxConcurrentJobs: parseInt(e.target.value),
-                        })
-                      }
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Seasonal Adjustment</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={newParameters.seasonalAdjustment || 0}
-                      onChange={(e) =>
-                        setNewParameters({
-                          ...newParameters,
-                          seasonalAdjustment: parseFloat(e.target.value),
-                        })
-                      }
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-                    />
-                  </div>
                 </div>
               ) : (
                 <div className="text-gray-600">
