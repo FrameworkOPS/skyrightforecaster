@@ -2,7 +2,7 @@ import jwt, { SignOptions } from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 
 const JWT_SECRET = process.env.JWT_SECRET || process.env.JWT_Secret || 'your_jwt_secret_key_change_in_production';
-const JWT_EXPIRATION = '24h'; // Always use '24h' format for JWT expiration
+const JWT_EXPIRATION = '7d'; // 7 days so tokens survive across sessions
 
 export interface JWTPayload {
   id?: string;

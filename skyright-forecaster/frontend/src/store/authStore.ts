@@ -119,3 +119,24 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
 // Check auth on app load
 useAuthStore.getState().checkAuth()
+
+// Global fetch interceptor: auto-logout on 401 "Invalid or expired token"
+const _originalFetch = window.fetch
+window.fetch = async (...args) => {
+  const response = await _originalFetch(...args)
+  if (response.status === 401) {
+    // Clone so callers can still read the body
+    const clone = response.clone()
+    try {
+      const data = await clone.json()
+      if (data?.error === 'Invalid or expired token' || data?.message === 'Invalid or expired token') {
+        console.warn('Session expired — logging out')
+        useAuthStore.getState().logout()
+        window.location.href = '/login'
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }
+  return response
+}
