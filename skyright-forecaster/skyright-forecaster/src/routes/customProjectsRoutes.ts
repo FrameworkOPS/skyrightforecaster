@@ -28,20 +28,20 @@ router.get('/:id', getCustomProject);
 
 /**
  * POST /api/custom-projects
- * Create a new custom project (requires admin or manager role)
+ * Create a new custom project (requires authentication)
  */
-router.post('/', authorize('admin', 'manager'), createCustomProject);
+router.post('/', createCustomProject);
 
 /**
  * PUT /api/custom-projects/:id
- * Update a custom project (requires admin or manager role)
+ * Update a custom project (requires authentication)
  */
-router.put('/:id', authorize('admin', 'manager'), updateCustomProject);
+router.put('/:id', updateCustomProject);
 
 /**
  * DELETE /api/custom-projects/:id
- * Delete a custom project (requires admin role)
+ * Delete a custom project (requires authentication)
  */
-router.delete('/:id', authorize('admin'), deleteCustomProject);
+router.delete('/:id', deleteCustomProject);
 
 export default router;

@@ -7,18 +7,17 @@ import {
   deletePipelineItem,
   getPipelineSummary
 } from '../controllers/pipelineController';
-import { authenticateToken, authorize } from '../middleware/auth';
+import { authenticateToken } from '../middleware/auth';
 
 const router = express.Router();
 
-// Public routes (require authentication)
-router.get('/', authenticateToken, getPipelineItems);
-router.get('/summary', authenticateToken, getPipelineSummary);
-router.get('/:id', authenticateToken, getPipelineItem);
+router.use(authenticateToken);
 
-// Protected routes (require admin/manager/scheduler)
-router.post('/', authenticateToken, authorize('admin', 'manager', 'scheduler'), createPipelineItem);
-router.put('/:id', authenticateToken, authorize('admin', 'manager', 'scheduler'), updatePipelineItem);
-router.delete('/:id', authenticateToken, authorize('admin'), deletePipelineItem);
+router.get('/', getPipelineItems);
+router.get('/summary', getPipelineSummary);
+router.get('/:id', getPipelineItem);
+router.post('/', createPipelineItem);
+router.put('/:id', updatePipelineItem);
+router.delete('/:id', deletePipelineItem);
 
 export default router;

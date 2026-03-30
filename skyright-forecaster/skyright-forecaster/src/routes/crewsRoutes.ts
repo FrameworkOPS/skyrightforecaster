@@ -28,20 +28,20 @@ router.get('/:id', getCrew);
 
 /**
  * POST /api/crews
- * Create a new crew (requires admin or manager role)
+ * Create a new crew (requires authentication)
  */
-router.post('/', authorize('admin', 'manager'), createCrew);
+router.post('/', createCrew);
 
 /**
  * PUT /api/crews/:id
- * Update a crew (requires admin or manager role)
+ * Update a crew (requires authentication)
  */
-router.put('/:id', authorize('admin', 'manager'), updateCrew);
+router.put('/:id', updateCrew);
 
 /**
  * DELETE /api/crews/:id
- * Delete (soft delete) a crew (requires admin role)
+ * Delete (soft delete) a crew (requires authentication)
  */
-router.delete('/:id', authorize('admin'), deleteCrew);
+router.delete('/:id', deleteCrew);
 
 export default router;

@@ -6,18 +6,16 @@ import {
   getRevenueAnalysis,
   getCapacityAnalysis
 } from '../controllers/metricsController';
-import { authenticateToken, authorize } from '../middleware/auth';
+import { authenticateToken } from '../middleware/auth';
 
 const router = express.Router();
 
-// All metrics routes require authentication
-// GET routes available to all authenticated users
-router.get('/dashboard', authenticateToken, getMetricsDashboardData);
-router.get('/lead-time-analysis', authenticateToken, getLeadTimeAnalysis);
-router.get('/revenue-analysis', authenticateToken, getRevenueAnalysis);
-router.get('/capacity-analysis', authenticateToken, getCapacityAnalysis);
+router.use(authenticateToken);
 
-// POST routes (calculation/calculation) require admin/manager/scheduler
-router.post('/calculate', authenticateToken, authorize('admin', 'manager', 'scheduler'), calculateWeeklyMetrics);
+router.get('/dashboard', getMetricsDashboardData);
+router.get('/lead-time-analysis', getLeadTimeAnalysis);
+router.get('/revenue-analysis', getRevenueAnalysis);
+router.get('/capacity-analysis', getCapacityAnalysis);
+router.post('/calculate', calculateWeeklyMetrics);
 
 export default router;

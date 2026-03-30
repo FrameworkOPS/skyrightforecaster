@@ -7,14 +7,13 @@ import {
   exportForecastPDF,
   getSixMonthForecast,
 } from '../controllers/forecastController';
-import { authenticateToken, authorize } from '../middleware/auth';
+import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
 
-// All forecast routes require authentication
 router.use(authenticateToken);
 
-router.post('/', authorize('admin', 'manager', 'scheduler'), generateForecast);
+router.post('/', generateForecast);
 router.get('/six-month', getSixMonthForecast);
 router.get('/history', getForecastHistory);
 router.get('/:id/export', exportForecastPDF);

@@ -6,17 +6,16 @@ import {
   getCrewStaffHistory,
   getAllCrewsStaffSummary
 } from '../controllers/crewStaffController';
-import { authenticateToken, authorize } from '../middleware/auth';
+import { authenticateToken } from '../middleware/auth';
 
 const router = express.Router();
 
-// Public routes (require authentication)
-router.get('/', authenticateToken, getAllCrewsStaffSummary);
-router.get('/crew/:crewId', authenticateToken, getCrewStaff);
-router.get('/crew/:crewId/history', authenticateToken, getCrewStaffHistory);
+router.use(authenticateToken);
 
-// Protected routes (require admin/manager)
-router.post('/', authenticateToken, authorize('admin', 'manager'), createCrewStaff);
-router.put('/:id', authenticateToken, authorize('admin', 'manager'), updateCrewStaff);
+router.get('/', getAllCrewsStaffSummary);
+router.get('/crew/:crewId', getCrewStaff);
+router.get('/crew/:crewId/history', getCrewStaffHistory);
+router.post('/', createCrewStaff);
+router.put('/:id', updateCrewStaff);
 
 export default router;
