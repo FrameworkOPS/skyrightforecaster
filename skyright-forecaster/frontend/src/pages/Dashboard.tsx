@@ -39,6 +39,7 @@ export default function Dashboard() {
   const [editingParameters, setEditingParameters] = useState(false);
   const [newParameters, setNewParameters] = useState<Partial<Parameters>>({});
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [currentRates, setCurrentRates] = useState<{ shingle: number; metal: number } | null>(null);
 
   useEffect(() => {
     loadData();
@@ -63,6 +64,21 @@ export default function Dashboard() {
       if (forecastsRes.ok) {
         const data = await forecastsRes.json();
         setForecasts(data.data || []);
+      }
+
+      // Load current-week production rates by job type from 6-month forecast
+      const sixMonthRes = await fetch(`${API_BASE_URL}/api/forecasts/six-month`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (sixMonthRes.ok) {
+        const data = await sixMonthRes.json();
+        const weeks = data.data?.weeks || [];
+        if (weeks.length > 0) {
+          setCurrentRates({
+            shingle: weeks[0].production_rate_shingles || 0,
+            metal: weeks[0].production_rate_metal || 0,
+          });
+        }
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -251,21 +267,23 @@ export default function Dashboard() {
         {activeTab === 'forecasts' && (
           <>
             {/* Key Metrics */}
-            {parameters && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                <div className="bg-white rounded-lg shadow p-6">
-                  <p className="text-gray-600 text-sm">Production Rate</p>
-                  <p className="text-3xl font-bold text-blue-600">{parameters.currentProductionRate}</p>
-                  <p className="text-gray-500 text-xs mt-2">jobs/week</p>
-                </div>
-
-                <div className="bg-white rounded-lg shadow p-6">
-                  <p className="text-gray-600 text-sm">Crew Capacity</p>
-                  <p className="text-3xl font-bold text-green-600">{parameters.crewCapacity}</p>
-                  <p className="text-gray-500 text-xs mt-2">team members</p>
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+              <div className="bg-white rounded-lg shadow p-6">
+                <p className="text-gray-600 text-sm">Shingle Production Rate</p>
+                <p className="text-3xl font-bold text-blue-600">
+                  {currentRates ? currentRates.shingle.toLocaleString() : '—'}
+                </p>
+                <p className="text-gray-500 text-xs mt-2">SQs / week (this week)</p>
               </div>
-            )}
+
+              <div className="bg-white rounded-lg shadow p-6">
+                <p className="text-gray-600 text-sm">Metal Production Rate</p>
+                <p className="text-3xl font-bold text-orange-600">
+                  {currentRates ? currentRates.metal.toLocaleString() : '—'}
+                </p>
+                <p className="text-gray-500 text-xs mt-2">SQs / week (this week)</p>
+              </div>
+            </div>
 
             {/* Parameters Section */}
             <div className="bg-white rounded-lg shadow p-6 mb-8">
