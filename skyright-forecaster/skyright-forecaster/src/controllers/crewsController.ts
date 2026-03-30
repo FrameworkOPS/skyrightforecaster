@@ -11,6 +11,7 @@ interface CrewRequest {
   start_date: string; // ISO date
   terminate_date?: string; // ISO date, optional
   revenue_per_sq?: number;
+  weekly_sq_capacity?: number; // SQs this crew can produce per week at full capacity
 }
 
 interface CrewResponse {
@@ -22,6 +23,7 @@ interface CrewResponse {
   start_date: string;
   terminate_date?: string;
   revenue_per_sq: number;
+  weekly_sq_capacity: number | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -44,7 +46,7 @@ export const getCrews = asyncHandler(async (req: Request, res: Response) => {
 
   const result = await query(
     `SELECT id, crew_name, crew_type, team_members, training_period_days, start_date,
-            terminate_date, revenue_per_sq, is_active, created_at, updated_at
+            terminate_date, revenue_per_sq, weekly_sq_capacity, is_active, created_at, updated_at
      FROM crews
      ${whereClause}
      ORDER BY created_at DESC`,
@@ -60,6 +62,7 @@ export const getCrews = asyncHandler(async (req: Request, res: Response) => {
     start_date: row.start_date,
     terminate_date: row.terminate_date,
     revenue_per_sq: parseFloat(row.revenue_per_sq),
+    weekly_sq_capacity: row.weekly_sq_capacity ? parseFloat(row.weekly_sq_capacity) : null,
     is_active: row.is_active,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -79,7 +82,7 @@ export const getCrew = asyncHandler(async (req: Request<{ id: string }>, res: Re
 
   const result = await query(
     `SELECT id, crew_name, crew_type, team_members, training_period_days, start_date,
-            terminate_date, revenue_per_sq, is_active, created_at, updated_at
+            terminate_date, revenue_per_sq, weekly_sq_capacity, is_active, created_at, updated_at
      FROM crews WHERE id = $1`,
     [id]
   );
@@ -98,6 +101,7 @@ export const getCrew = asyncHandler(async (req: Request<{ id: string }>, res: Re
     start_date: row.start_date,
     terminate_date: row.terminate_date,
     revenue_per_sq: parseFloat(row.revenue_per_sq),
+    weekly_sq_capacity: row.weekly_sq_capacity ? parseFloat(row.weekly_sq_capacity) : null,
     is_active: row.is_active,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -125,6 +129,7 @@ export const createCrew = asyncHandler(async (req: Request<{}, {}, CrewRequest>,
     start_date,
     terminate_date,
     revenue_per_sq,
+    weekly_sq_capacity,
   } = req.body;
 
   // Validation
@@ -147,6 +152,9 @@ export const createCrew = asyncHandler(async (req: Request<{}, {}, CrewRequest>,
   // Set default revenue_per_sq based on crew type
   const defaultRevenue = crew_type === 'shingle' ? 600 : 1000;
   const finalRevenuePerSq = revenue_per_sq ?? defaultRevenue;
+  // Default weekly SQ capacity: shingle = 200 SQs/week, metal = 100 SQs/week
+  const defaultCapacity = crew_type === 'shingle' ? 200 : 100;
+  const finalWeeklySqCapacity = weekly_sq_capacity ?? defaultCapacity;
 
   const crewId = await getUUID();
 
@@ -154,8 +162,8 @@ export const createCrew = asyncHandler(async (req: Request<{}, {}, CrewRequest>,
     await query(
       `INSERT INTO crews
        (id, crew_name, crew_type, team_members, training_period_days, start_date,
-        terminate_date, revenue_per_sq, is_active, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        terminate_date, revenue_per_sq, weekly_sq_capacity, is_active, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
         crewId,
         crew_name,
@@ -165,6 +173,7 @@ export const createCrew = asyncHandler(async (req: Request<{}, {}, CrewRequest>,
         start_date,
         terminate_date || null,
         finalRevenuePerSq,
+        finalWeeklySqCapacity,
         true,
         req.user.userId,
       ]
@@ -179,6 +188,7 @@ export const createCrew = asyncHandler(async (req: Request<{}, {}, CrewRequest>,
       start_date,
       terminate_date,
       revenue_per_sq: finalRevenuePerSq,
+      weekly_sq_capacity: finalWeeklySqCapacity,
       is_active: true,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -213,6 +223,7 @@ export const updateCrew = asyncHandler(
       start_date,
       terminate_date,
       revenue_per_sq,
+      weekly_sq_capacity,
     } = req.body;
 
     // Check crew exists
@@ -259,6 +270,10 @@ export const updateCrew = asyncHandler(
       updates.push(`revenue_per_sq = $${paramIndex++}`);
       params.push(revenue_per_sq);
     }
+    if (weekly_sq_capacity !== undefined) {
+      updates.push(`weekly_sq_capacity = $${paramIndex++}`);
+      params.push(weekly_sq_capacity);
+    }
 
     updates.push(`updated_at = CURRENT_TIMESTAMP`);
     params.push(id);
@@ -282,6 +297,7 @@ export const updateCrew = asyncHandler(
       start_date: row.start_date,
       terminate_date: row.terminate_date,
       revenue_per_sq: parseFloat(row.revenue_per_sq),
+      weekly_sq_capacity: row.weekly_sq_capacity ? parseFloat(row.weekly_sq_capacity) : null,
       is_active: row.is_active,
       created_at: row.created_at,
       updated_at: row.updated_at,
@@ -323,6 +339,7 @@ export const deleteCrew = asyncHandler(async (req: Request<{ id: string }>, res:
     start_date: row.start_date,
     terminate_date: row.terminate_date,
     revenue_per_sq: parseFloat(row.revenue_per_sq),
+    weekly_sq_capacity: row.weekly_sq_capacity ? parseFloat(row.weekly_sq_capacity) : null,
     is_active: row.is_active,
     created_at: row.created_at,
     updated_at: row.updated_at,

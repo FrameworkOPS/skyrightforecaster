@@ -115,7 +115,7 @@ export const createOrUpdateSalesForecast = asyncHandler(async (req: Request, res
        ON CONFLICT (forecast_week, job_type) DO UPDATE
        SET projected_square_footage = $3, projected_job_count = $4, notes = $5, updated_by = $6, updated_at = CURRENT_TIMESTAMP
        RETURNING *`,
-      [forecastWeek, jobType, projectedSquareFootage, projectedJobCount || 0, notes || null, req.user?.id || null]
+      [forecastWeek, jobType, projectedSquareFootage, projectedJobCount || 0, notes || null, req.user?.userId || null]
     );
 
     const saved = result.rows[0];
@@ -165,7 +165,7 @@ export const copyPreviousWeek = asyncHandler(async (req: Request, res: Response)
      ON CONFLICT (forecast_week, job_type) DO UPDATE
      SET projected_square_footage = $3, projected_job_count = $4, notes = $5, updated_by = $6, updated_at = CURRENT_TIMESTAMP
      RETURNING *`,
-    [toWeek, jobType, sourceData.projected_square_footage, sourceData.projected_job_count, sourceData.notes, req.user?.id || null]
+    [toWeek, jobType, sourceData.projected_square_footage, sourceData.projected_job_count, sourceData.notes, req.user?.userId || null]
   );
 
   const copied = result.rows[0];

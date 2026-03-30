@@ -200,7 +200,26 @@ export default function MetricsDashboard() {
       {loading ? (
         <div className="text-center py-8 text-gray-500">Loading metrics...</div>
       ) : metrics.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">No metrics data available</div>
+        <div className="bg-white rounded-lg shadow p-8 text-center space-y-4">
+          <div className="text-gray-400 text-5xl">---</div>
+          <h3 className="text-lg font-semibold text-gray-700">No Metrics Data Yet</h3>
+          <p className="text-gray-500 max-w-md mx-auto">
+            Metrics are calculated from your pipeline, sales forecasts, production actuals, and crew data.
+            To populate this dashboard:
+          </p>
+          <ol className="text-sm text-gray-600 text-left max-w-md mx-auto space-y-2">
+            <li><strong>1.</strong> Add crews in the <span className="font-medium">Crews</span> tab</li>
+            <li><strong>2.</strong> Add pipeline items in the <span className="font-medium">Pipeline</span> tab</li>
+            <li><strong>3.</strong> Enter sales forecasts in the <span className="font-medium">Sales Forecast</span> tab</li>
+            <li><strong>4.</strong> Metrics will auto-calculate from this data</li>
+          </ol>
+          <button
+            onClick={loadMetrics}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Retry Loading Metrics
+          </button>
+        </div>
       ) : (
         <>
           {/* KPI Cards - Side by Side */}

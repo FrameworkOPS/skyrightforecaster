@@ -67,7 +67,7 @@ export const calculateWeeklyMetrics = asyncHandler(async (req: Request, res: Res
 
   // 2. Calculate effective production capacity
   const crewsResult = await query(
-    `SELECT * FROM crews
+    `SELECT *, weekly_sq_capacity FROM crews
      WHERE crew_type = $1 AND is_active = true
      ORDER BY crew_name`,
     [jobType]
@@ -76,6 +76,8 @@ export const calculateWeeklyMetrics = asyncHandler(async (req: Request, res: Res
   const crews: CrewData[] = crewsResult.rows;
   let totalCapacitySQs = 0;
   const weekDate = new Date(week as string);
+  // Default SQ capacity per crew type if not set on the crew record
+  const DEFAULT_SQ_CAPACITY: Record<string, number> = { shingle: 200, metal: 100 };
 
   for (const crew of crews) {
     const daysElapsed = daysBetween(crew.start_date, week as string);
@@ -101,8 +103,10 @@ export const calculateWeeklyMetrics = asyncHandler(async (req: Request, res: Res
     const isBlocked = projectsResult.rows.length > 0;
     const effectiveMultiplier = isBlocked ? 0.0 : rampUpMult * rampDownMult;
 
-    // Assume base crew capacity of 1000 SQs per week per crew (can be parameterized)
-    const crewBaseSQCapacity = 1000;
+    // Use crew's own weekly_sq_capacity, fallback to default by type
+    const crewBaseSQCapacity = (crew as any).weekly_sq_capacity
+      ? parseFloat((crew as any).weekly_sq_capacity)
+      : (DEFAULT_SQ_CAPACITY[crew.crew_type] || 100);
     totalCapacitySQs += crewBaseSQCapacity * effectiveMultiplier;
   }
 

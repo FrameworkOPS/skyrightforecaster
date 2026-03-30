@@ -65,6 +65,7 @@ export async function initializeDatabase(): Promise<void> {
         start_date DATE NOT NULL,
         terminate_date DATE,
         revenue_per_sq DECIMAL(10, 2),
+        weekly_sq_capacity DECIMAL(10, 2),
         is_active BOOLEAN NOT NULL DEFAULT true,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -247,6 +248,11 @@ export async function initializeDatabase(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_crew_staff_crew_id ON crew_staff(crew_id);
       CREATE INDEX IF NOT EXISTS idx_production_actuals_week_type ON production_actuals(production_week, job_type);
       CREATE UNIQUE INDEX IF NOT EXISTS uq_metrics_snapshots_week_type ON metrics_snapshots(metric_week, job_type);
+    `);
+
+    // Migrations: add columns to existing tables if they don't exist
+    await query(`
+      ALTER TABLE crews ADD COLUMN IF NOT EXISTS weekly_sq_capacity DECIMAL(10, 2)
     `);
 
     // Seed default production parameters if none exist

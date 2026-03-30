@@ -27,20 +27,32 @@ interface ForecastData {
   weeks: ForecastWeek[];
 }
 
+type ForecastDuration = '3' | '6' | '9';
+
 export default function SixMonthForecaster() {
   const { token } = useAuthStore();
   const [forecastData, setForecastData] = useState<ForecastWeek[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedType, setSelectedType] = useState<'all' | 'shingle' | 'metal'>('all');
+  const [duration, setDuration] = useState<ForecastDuration>('6');
 
   useEffect(() => {
-    loadSixMonthForecast();
-  }, []);
+    loadForecast();
+  }, [duration]);
 
-  const loadSixMonthForecast = async () => {
+  const getDurationWeeks = (d: ForecastDuration): number => {
+    switch (d) {
+      case '3': return 13;
+      case '6': return 26;
+      case '9': return 39;
+    }
+  };
+
+  const loadForecast = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/forecasts/six-month`, {
+      const weeks = getDurationWeeks(duration);
+      const res = await fetch(`${API_BASE_URL}/api/forecasts/six-month?weeks=${weeks}`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
@@ -49,7 +61,7 @@ export default function SixMonthForecaster() {
         setForecastData(data.data?.weeks || []);
       }
     } catch (error) {
-      console.error('Error loading 6-month forecast:', error);
+      console.error('Error loading forecast:', error);
     } finally {
       setLoading(false);
     }
@@ -62,14 +74,32 @@ export default function SixMonthForecaster() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-900">6-Month Production Forecast</h2>
+        <h2 className="text-2xl font-bold text-gray-900">Production Forecast</h2>
         <button
-          onClick={loadSixMonthForecast}
+          onClick={loadForecast}
           disabled={loading}
           className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
         >
           {loading ? 'Loading...' : 'Refresh'}
         </button>
+      </div>
+
+      {/* Duration Selector */}
+      <div className="flex gap-2 items-center">
+        <span className="text-sm font-medium text-gray-700 mr-2">Duration:</span>
+        {(['3', '6', '9'] as ForecastDuration[]).map((d) => (
+          <button
+            key={d}
+            onClick={() => setDuration(d)}
+            className={`px-4 py-2 rounded font-medium text-sm ${
+              duration === d
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            {d} Month
+          </button>
+        ))}
       </div>
 
       {/* Type Filter */}
@@ -95,9 +125,9 @@ export default function SixMonthForecaster() {
 
       {/* Forecast Table */}
       {loading ? (
-        <div className="text-center py-8 text-gray-500">Loading 6-month forecast...</div>
+        <div className="text-center py-8 text-gray-500">Loading forecast...</div>
       ) : forecastData.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">No forecast data available</div>
+        <div className="text-center py-8 text-gray-500">No forecast data available. Ensure crews and pipeline data are configured.</div>
       ) : (
         <div className="bg-white rounded-lg shadow overflow-x-auto">
           <table className="w-full text-sm">
@@ -176,17 +206,17 @@ export default function SixMonthForecaster() {
                                   : 'bg-red-100 text-red-800'
                               }`}
                             >
-                              {event.type === 'added' ? '✓' : '✕'} {event.crew_name} ({event.crew_type})
+                              {event.type === 'added' ? '+' : '-'} {event.crew_name} ({event.crew_type})
                             </span>
                           ))}
                           {week.custom_projects.map((proj, idx) => (
                             <span key={idx} className="block px-2 py-1 rounded bg-gray-100 text-gray-800">
-                              📋 {proj.name}
+                              Project: {proj.name}
                             </span>
                           ))}
                         </div>
                       ) : (
-                        <span className="text-gray-400">—</span>
+                        <span className="text-gray-400">-</span>
                       )}
                     </td>
                   </tr>
@@ -223,10 +253,10 @@ export default function SixMonthForecaster() {
             <span className="text-sm">S = Shingles, M = Metal</span>
           </div>
           <div>
-            <span className="text-sm">✓ = Crew added, ✕ = Crew removed</span>
+            <span className="text-sm">+ = Crew added, - = Crew removed</span>
           </div>
           <div>
-            <span className="text-sm">📋 = Custom project blocking</span>
+            <span className="text-sm">Project = Custom project blocking</span>
           </div>
         </div>
       </div>

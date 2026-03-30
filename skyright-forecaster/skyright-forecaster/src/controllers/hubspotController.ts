@@ -66,10 +66,10 @@ export const syncJobs = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('User not authenticated', 401);
   }
 
-  const { accessToken } = req.body;
+  const accessToken = process.env.HUBSPOT_ACCESS_TOKEN;
 
   if (!accessToken) {
-    throw new AppError('HubSpot access token required', 400);
+    throw new AppError('HUBSPOT_ACCESS_TOKEN not configured on server', 500);
   }
 
   try {
@@ -106,14 +106,25 @@ export const getHubSpotStatus = asyncHandler(async (req: Request, res: Response)
 
   const clientId = process.env.HUBSPOT_CLIENT_ID;
   const clientSecret = process.env.HUBSPOT_CLIENT_SECRET;
+  const accessToken = process.env.HUBSPOT_ACCESS_TOKEN;
+
+  // Configured if we have either OAuth credentials (clientId + clientSecret) or a PAT (accessToken)
+  const isConfigured = !!(accessToken || (clientId && clientSecret));
+
+  let message = 'HubSpot integration not configured. Please set HUBSPOT_ACCESS_TOKEN or HUBSPOT_CLIENT_ID + HUBSPOT_CLIENT_SECRET';
+  if (accessToken && clientSecret) {
+    message = 'HubSpot integration configured (Private Access Token + Client Secret)';
+  } else if (accessToken) {
+    message = 'HubSpot integration configured (Private Access Token)';
+  } else if (clientId && clientSecret) {
+    message = 'HubSpot integration configured (OAuth)';
+  }
 
   res.json({
     success: true,
     data: {
-      configured: !!(clientId && clientSecret),
-      message: clientId && clientSecret
-        ? 'HubSpot integration configured'
-        : 'HubSpot integration not configured. Please set HUBSPOT_CLIENT_ID and HUBSPOT_CLIENT_SECRET',
+      configured: isConfigured,
+      message,
     },
   });
 });

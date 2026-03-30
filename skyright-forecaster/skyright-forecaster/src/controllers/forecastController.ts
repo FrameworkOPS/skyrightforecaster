@@ -512,6 +512,8 @@ export const exportForecastPDF = asyncHandler(
 );
 
 export const getSixMonthForecast = asyncHandler(async (req: Request, res: Response) => {
+  const numWeeks = parseInt(req.query.weeks as string) || 26;
+  const totalWeeks = Math.min(Math.max(numWeeks, 1), 52); // Clamp between 1 and 52
   const weeks: Array<any> = [];
   const startDate = new Date();
   const mondayStart = new Date(startDate);
@@ -529,21 +531,22 @@ export const getSixMonthForecast = asyncHandler(async (req: Request, res: Respon
     pipelineByType[row.job_type] = parseFloat(row.total_sqs) || 0;
   });
 
-  // Get all active crews
+  // Get all active crews (including weekly_sq_capacity)
   const crewsResult = await query(
-    `SELECT id, crew_name, crew_type, training_period_days, start_date, terminate_date
+    `SELECT id, crew_name, crew_type, training_period_days, start_date, terminate_date, weekly_sq_capacity
      FROM crews WHERE is_active = true ORDER BY crew_type, crew_name`
   );
   const allCrews = crewsResult.rows;
 
-  const CREW_BASE_CAPACITY = 1000; // SQs per week per crew at full capacity
+  // Fallback base capacity per crew type if weekly_sq_capacity not set
+  const DEFAULT_SQ_CAPACITY: Record<string, number> = { shingle: 200, metal: 100 };
 
   // Rolling pipeline starts at current snapshot and is depleted/grown each week
   let rollingPipelineShingle = pipelineByType['shingle'] || 0;
   let rollingPipelineMetal = pipelineByType['metal'] || 0;
 
-  // Generate 26 weeks of forecast
-  for (let i = 0; i < 26; i++) {
+  // Generate forecast weeks
+  for (let i = 0; i < totalWeeks; i++) {
     const weekDate = new Date(mondayStart);
     weekDate.setDate(weekDate.getDate() + i * 7);
     const weekStr = weekDate.toISOString().split('T')[0];
@@ -572,7 +575,11 @@ export const getSixMonthForecast = asyncHandler(async (req: Request, res: Respon
       if (crew.terminate_date) {
         rampDown = calculateCrewRampDownMultiplier(crew.terminate_date, weekDate);
       }
-      productionByType[crew.crew_type] = (productionByType[crew.crew_type] || 0) + CREW_BASE_CAPACITY * rampUp * rampDown;
+      // Use crew's own weekly_sq_capacity, fallback to default by type
+      const crewCapacity = crew.weekly_sq_capacity
+        ? parseFloat(crew.weekly_sq_capacity)
+        : (DEFAULT_SQ_CAPACITY[crew.crew_type] || 100);
+      productionByType[crew.crew_type] = (productionByType[crew.crew_type] || 0) + crewCapacity * rampUp * rampDown;
     }
 
     // Lead time: rolling pipeline SQs / weekly production rate

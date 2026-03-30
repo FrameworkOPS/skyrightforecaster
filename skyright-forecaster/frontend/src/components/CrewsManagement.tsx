@@ -11,6 +11,7 @@ interface Crew {
   start_date: string;
   terminate_date?: string;
   revenue_per_sq: number;
+  weekly_sq_capacity: number | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -24,6 +25,7 @@ interface CrewFormData {
   start_date: string;
   terminate_date?: string;
   revenue_per_sq?: number;
+  weekly_sq_capacity?: number;
 }
 
 export default function CrewsManagement() {
@@ -41,6 +43,7 @@ export default function CrewsManagement() {
     training_period_days: 28,
     start_date: new Date().toISOString().split('T')[0],
     revenue_per_sq: 600,
+    weekly_sq_capacity: 200,
   });
 
   useEffect(() => {
@@ -91,6 +94,7 @@ export default function CrewsManagement() {
           training_period_days: 28,
           start_date: new Date().toISOString().split('T')[0],
           revenue_per_sq: 600,
+          weekly_sq_capacity: 200,
         });
         loadCrews();
       } else {
@@ -130,6 +134,7 @@ export default function CrewsManagement() {
       start_date: crew.start_date,
       terminate_date: crew.terminate_date,
       revenue_per_sq: crew.revenue_per_sq,
+      weekly_sq_capacity: crew.weekly_sq_capacity ?? (crew.crew_type === 'shingle' ? 200 : 100),
     });
     setEditingId(crew.id);
     setShowForm(true);
@@ -140,6 +145,7 @@ export default function CrewsManagement() {
       ...formData,
       crew_type: type,
       revenue_per_sq: type === 'shingle' ? 600 : 1000,
+      weekly_sq_capacity: type === 'shingle' ? 200 : 100,
     });
   };
 
@@ -159,6 +165,7 @@ export default function CrewsManagement() {
                 training_period_days: 28,
                 start_date: new Date().toISOString().split('T')[0],
                 revenue_per_sq: 600,
+                weekly_sq_capacity: 200,
               });
             }
           }}
@@ -243,7 +250,7 @@ export default function CrewsManagement() {
               />
             </div>
 
-            <div className="md:col-span-2">
+            <div>
               <label className="block text-sm font-medium text-gray-700">
                 Revenue per Sq ($) *
               </label>
@@ -258,7 +265,26 @@ export default function CrewsManagement() {
                 step="50"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Default: $600 for shingle, $1000 for metal
+                Default: $600 shingle, $1000 metal
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Weekly SQ Capacity *
+              </label>
+              <input
+                type="number"
+                value={formData.weekly_sq_capacity}
+                onChange={(e) =>
+                  setFormData({ ...formData, weekly_sq_capacity: parseFloat(e.target.value) })
+                }
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                min="1"
+                step="10"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                SQs this crew produces per week at full capacity. Default: 200 shingle, 100 metal
               </p>
             </div>
           </div>
@@ -301,6 +327,7 @@ export default function CrewsManagement() {
                   Terminate Date
                 </th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">$/sq</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">SQs/wk</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">Actions</th>
               </tr>
             </thead>
@@ -327,6 +354,9 @@ export default function CrewsManagement() {
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-900">
                     ${crew.revenue_per_sq.toFixed(0)}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-900">
+                    {crew.weekly_sq_capacity != null ? crew.weekly_sq_capacity.toFixed(0) : '—'}
                   </td>
                   <td className="px-6 py-4 text-sm space-x-2">
                     <button
