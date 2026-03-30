@@ -538,6 +538,10 @@ export const getSixMonthForecast = asyncHandler(async (req: Request, res: Respon
 
   const CREW_BASE_CAPACITY = 1000; // SQs per week per crew at full capacity
 
+  // Rolling pipeline starts at current snapshot and is depleted/grown each week
+  let rollingPipelineShingle = pipelineByType['shingle'] || 0;
+  let rollingPipelineMetal = pipelineByType['metal'] || 0;
+
   // Generate 26 weeks of forecast
   for (let i = 0; i < 26; i++) {
     const weekDate = new Date(mondayStart);
@@ -571,12 +575,12 @@ export const getSixMonthForecast = asyncHandler(async (req: Request, res: Respon
       productionByType[crew.crew_type] = (productionByType[crew.crew_type] || 0) + CREW_BASE_CAPACITY * rampUp * rampDown;
     }
 
-    // Lead time: pipeline SQs / weekly production rate
+    // Lead time: rolling pipeline SQs / weekly production rate
     const shingleLeadWeeks = productionByType.shingle > 0
-      ? (pipelineByType.shingle || 0) / productionByType.shingle
+      ? rollingPipelineShingle / productionByType.shingle
       : 0;
     const metalLeadWeeks = productionByType.metal > 0
-      ? (pipelineByType.metal || 0) / productionByType.metal
+      ? rollingPipelineMetal / productionByType.metal
       : 0;
     const avgLeadTimeWeeks = Math.round(Math.max(shingleLeadWeeks, metalLeadWeeks));
 
@@ -608,8 +612,8 @@ export const getSixMonthForecast = asyncHandler(async (req: Request, res: Respon
 
     weeks.push({
       week: weekStr,
-      pipeline_sqs_shingles: pipelineByType.shingle || 0,
-      pipeline_sqs_metal: pipelineByType.metal || 0,
+      pipeline_sqs_shingles: Math.round(rollingPipelineShingle),
+      pipeline_sqs_metal: Math.round(rollingPipelineMetal),
       production_rate_shingles: Math.round(productionByType.shingle),
       production_rate_metal: Math.round(productionByType.metal),
       sales_forecast_shingles: salesByType.shingle || 0,
@@ -618,6 +622,10 @@ export const getSixMonthForecast = asyncHandler(async (req: Request, res: Respon
       crew_changes: crewChanges,
       custom_projects: customProjects,
     });
+
+    // Roll the pipeline forward: subtract what was produced, add what was sold
+    rollingPipelineShingle = Math.max(0, rollingPipelineShingle - productionByType.shingle + (salesByType.shingle || 0));
+    rollingPipelineMetal = Math.max(0, rollingPipelineMetal - productionByType.metal + (salesByType.metal || 0));
   }
 
   res.json({
