@@ -50,7 +50,7 @@ export default function CustomProjectsManagement() {
 
   const loadCrews = async () => {
     try {
-      const res = await fetch('${API_BASE_URL}/api/crews?active=true', {
+      const res = await fetch(`${API_BASE_URL}/api/crews?active=true`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
@@ -73,7 +73,7 @@ export default function CustomProjectsManagement() {
   const loadProjects = async () => {
     setLoading(true);
     try {
-      const res = await fetch('${API_BASE_URL}/api/custom-projects?active=true', {
+      const res = await fetch(`${API_BASE_URL}/api/custom-projects?active=true`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
@@ -98,7 +98,7 @@ export default function CustomProjectsManagement() {
     try {
       const url = editingId
         ? `${API_BASE_URL}/api/custom-projects/${editingId}`
-        : '${API_BASE_URL}/api/custom-projects';
+        : `${API_BASE_URL}/api/custom-projects`;
       const method = editingId ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
