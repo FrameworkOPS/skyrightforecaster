@@ -21,8 +21,22 @@ export const getParameters = asyncHandler(async (req: Request, res: Response) =>
      LIMIT 1`
   );
 
+  // Return defaults if no parameters exist yet
   if (result.rows.length === 0) {
-    throw new AppError('No production parameters found', 404);
+    return res.json({
+      success: true,
+      data: {
+        id: null,
+        currentProductionRate: 100,
+        rampUpTimeDays: 30,
+        crewCapacity: 5,
+        maxConcurrentJobs: 10,
+        seasonalAdjustment: 1.0,
+        notes: 'Default parameters',
+        createdAt: null,
+        updatedAt: null,
+      },
+    });
   }
 
   const params = result.rows[0];
@@ -30,11 +44,11 @@ export const getParameters = asyncHandler(async (req: Request, res: Response) =>
     success: true,
     data: {
       id: params.id,
-      currentProductionRate: params.current_production_rate,
-      rampUpTimeDays: params.ramp_up_time_days,
-      crewCapacity: params.crew_capacity,
-      maxConcurrentJobs: params.max_concurrent_jobs,
-      seasonalAdjustment: params.seasonal_adjustment,
+      currentProductionRate: parseFloat(params.current_production_rate) || 0,
+      rampUpTimeDays: parseInt(params.ramp_up_time_days) || 0,
+      crewCapacity: parseInt(params.crew_capacity) || 0,
+      maxConcurrentJobs: parseInt(params.max_concurrent_jobs) || 0,
+      seasonalAdjustment: parseFloat(params.seasonal_adjustment) || 1.0,
       notes: params.notes,
       createdAt: params.created_at,
       updatedAt: params.updated_at,

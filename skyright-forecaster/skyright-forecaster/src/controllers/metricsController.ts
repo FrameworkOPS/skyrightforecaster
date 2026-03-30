@@ -254,6 +254,16 @@ export const getMetricsDashboardData = asyncHandler(async (req: Request, res: Re
 
     return {
       ...metric,
+      // Parse DECIMAL/NUMERIC columns that pg returns as strings
+      pipeline_sqs: parseFloat(metric.pipeline_sqs) || 0,
+      pipeline_jobs: parseInt(metric.pipeline_jobs) || 0,
+      sales_forecast_sqs: parseFloat(metric.sales_forecast_sqs) || 0,
+      production_rate_sqs: parseFloat(metric.production_rate_sqs) || 0,
+      revenue_projected: parseFloat(metric.revenue_projected) || 0,
+      revenue_produced: parseFloat(metric.revenue_produced) || 0,
+      queue_growth: parseFloat(metric.queue_growth) || 0,
+      avg_lead_time_days: parseInt(metric.avg_lead_time_days) || 0,
+      capacity_utilization: parseFloat(metric.capacity_utilization) || 0,
       leadTimeWeeks,
       leadTimeStatus,
       crewCount,

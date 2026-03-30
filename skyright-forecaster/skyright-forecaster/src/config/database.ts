@@ -249,6 +249,14 @@ export async function initializeDatabase(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_metrics_snapshots_week_type ON metrics_snapshots(metric_week, job_type);
     `);
 
+    // Seed default production parameters if none exist
+    await query(`
+      INSERT INTO production_parameters
+        (current_production_rate, ramp_up_time_days, crew_capacity, max_concurrent_jobs, seasonal_adjustment, notes)
+      SELECT 100, 30, 5, 10, 1.0, 'Default parameters - update as needed'
+      WHERE NOT EXISTS (SELECT 1 FROM production_parameters)
+    `);
+
     console.log('Database initialized successfully');
   } catch (error) {
     console.error('Error initializing database', error);
