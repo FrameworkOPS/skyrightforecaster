@@ -620,11 +620,11 @@ export const getSixMonthForecast = asyncHandler(async (req: Request, res: Respon
 
     // Get crew changes for this week
     const crewAddResult = await query(
-      `SELECT crew_name, crew_type FROM crews WHERE start_date = $1::date`,
+      `SELECT COALESCE(crew_name, 'Unnamed Crew') as crew_name, crew_type FROM crews WHERE start_date = $1::date`,
       [weekStr]
     );
     const crewRemoveResult = await query(
-      `SELECT crew_name, crew_type FROM crews WHERE terminate_date = $1::date`,
+      `SELECT COALESCE(crew_name, 'Unnamed Crew') as crew_name, crew_type FROM crews WHERE terminate_date = $1::date`,
       [weekStr]
     );
     const crewChanges = [

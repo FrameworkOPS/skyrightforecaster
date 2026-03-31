@@ -33,7 +33,7 @@ export default function SalesForecastInput() {
     const today = new Date();
     const startDate = getMonday(today);
     const endDate = new Date(startDate);
-    endDate.setDate(endDate.getDate() + 84); // 12 weeks
+    endDate.setDate(endDate.getDate() + 182); // 6 months (~26 weeks)
 
     setStartWeek(formatDate(startDate));
     setEndWeek(formatDate(endDate));
@@ -159,6 +159,37 @@ export default function SalesForecastInput() {
     }
   };
 
+  const handleCopyAllWeeks = async (jobType: 'shingle' | 'metal') => {
+    const currentWeeks = getWeeks();
+    // Use the first week that has a value set as the source
+    const sourceValue = currentWeeks.map(w => getValue(w, jobType)).find(v => v > 0);
+    if (!sourceValue) return;
+
+    try {
+      await Promise.all(
+        currentWeeks.map(w =>
+          fetch(`${API_BASE_URL}/api/sales-forecast`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              forecastWeek: w,
+              jobType,
+              projectedSquareFootage: sourceValue,
+              projectedJobCount: 0,
+              notes: null,
+            }),
+          })
+        )
+      );
+      await loadForecasts(startWeek, endWeek);
+    } catch (error) {
+      console.error('Error copying all weeks:', error);
+    }
+  };
+
   const startEditing = (week: string, jobType: string) => {
     const existing = forecasts.find(f => f.forecast_week.substring(0, 10) === week && f.job_type === jobType);
     setFormData({
@@ -261,8 +292,30 @@ export default function SalesForecastInput() {
             <thead className="bg-gray-100 border-b border-gray-200 sticky top-0">
               <tr>
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Week</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Shingle SQs</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Metal SQs</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-700">
+                  <div className="flex items-center gap-2">
+                    Shingle SQs
+                    <button
+                      onClick={() => handleCopyAllWeeks('shingle')}
+                      title="Copy first entered shingle value to all weeks"
+                      className="px-2 py-0.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 font-normal"
+                    >
+                      Copy All
+                    </button>
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-left font-medium text-gray-700">
+                  <div className="flex items-center gap-2">
+                    Metal SQs
+                    <button
+                      onClick={() => handleCopyAllWeeks('metal')}
+                      title="Copy first entered metal value to all weeks"
+                      className="px-2 py-0.5 bg-red-600 text-white text-xs rounded hover:bg-red-700 font-normal"
+                    >
+                      Copy All
+                    </button>
+                  </div>
+                </th>
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Total SQs</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Actions</th>
               </tr>

@@ -211,7 +211,7 @@ export default function SixMonthForecaster() {
                                   : 'bg-red-100 text-red-800'
                               }`}
                             >
-                              {event.type === 'added' ? '+' : '-'} {event.crew_name} ({event.crew_type})
+                              {event.type === 'added' ? '+' : '-'} {event.crew_name || 'Unnamed Crew'} ({event.crew_type})
                             </span>
                           ))}
                           {week.custom_projects.map((proj, idx) => (

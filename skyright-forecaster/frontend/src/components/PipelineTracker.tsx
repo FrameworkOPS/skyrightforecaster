@@ -64,7 +64,9 @@ export default function PipelineTracker() {
         const crewsWithCapacity: CrewCapacity[] = (data.data || []).map((crew: any) => ({
           id: crew.id,
           crew_type: crew.crew_type,
-          sqs_per_week: 100, // Default, can be updated
+          sqs_per_week: crew.weekly_sq_capacity != null
+            ? parseFloat(crew.weekly_sq_capacity)
+            : (crew.crew_type === 'metal' ? 100 : 200),
         }));
         setCrews(crewsWithCapacity);
       }
