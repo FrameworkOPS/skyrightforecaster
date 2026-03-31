@@ -134,16 +134,23 @@ export default function SalesForecastInput() {
   };
 
   const handleCopyPreviousWeek = async (fromWeek: string, toWeek: string, jobType: string) => {
+    const sourceValue = getValue(fromWeek, jobType);
+    if (sourceValue <= 0) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/sales-forecast/copy-week`, {
+      const res = await fetch(`${API_BASE_URL}/api/sales-forecast`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ fromWeek, toWeek, jobType }),
+        body: JSON.stringify({
+          forecastWeek: toWeek,
+          jobType,
+          projectedSquareFootage: sourceValue,
+          projectedJobCount: 0,
+          notes: null,
+        }),
       });
-
       if (res.ok) {
         await loadForecasts(startWeek, endWeek);
       }

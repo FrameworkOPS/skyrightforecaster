@@ -23,10 +23,7 @@ dotenv.config();
 const app: Express = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
-app.use(helmet({ crossOriginResourcePolicy: false }));
-
-// CORS configuration - allow all origins
+// CORS must run before helmet so headers are present on all responses
 app.use((req: Request, res: Response, next: NextFunction) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -38,6 +35,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   }
   next();
 });
+
+app.use(helmet({ crossOriginResourcePolicy: false }));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

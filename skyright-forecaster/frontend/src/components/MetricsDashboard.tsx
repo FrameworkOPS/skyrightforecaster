@@ -34,7 +34,6 @@ interface TypeMetrics {
   revenue_projected: number;
   revenue_produced: number;
   avg_lead_time_days: number;
-  capacity_utilization: number;
   bottleneck_detected: boolean;
   crewCount: number;
   totalLeads: number;
@@ -130,7 +129,6 @@ export default function MetricsDashboard() {
         revenue_projected: 0,
         revenue_produced: 0,
         avg_lead_time_days: 0,
-        capacity_utilization: 0,
         bottleneck_detected: false,
         crewCount: 0,
         totalLeads: 0,
@@ -138,21 +136,26 @@ export default function MetricsDashboard() {
       };
     }
 
+    // Sort ascending so most recent week is last
+    const sorted = [...typeMetrics].sort(
+      (a, b) => new Date(a.metric_week).getTime() - new Date(b.metric_week).getTime()
+    );
+    const latest = sorted[sorted.length - 1];
+
     return {
-      pipeline_sqs: typeMetrics.reduce((sum, m) => sum + m.pipeline_sqs, 0),
-      sales_forecast_sqs: typeMetrics.reduce((sum, m) => sum + m.sales_forecast_sqs, 0),
-      production_rate_sqs: typeMetrics.reduce((sum, m) => sum + m.production_rate_sqs, 0),
+      // pipeline is current snapshot from most recent week
+      pipeline_sqs: latest.pipeline_sqs,
+      // production rate and sales forecast are per-week rates — use most recent week's value
+      sales_forecast_sqs: latest.sales_forecast_sqs,
+      production_rate_sqs: latest.production_rate_sqs,
+      // revenue totals can be summed across the 12-week window
       revenue_projected: typeMetrics.reduce((sum, m) => sum + m.revenue_projected, 0),
       revenue_produced: typeMetrics.reduce((sum, m) => sum + m.revenue_produced, 0),
-      avg_lead_time_days: Math.round(
-        typeMetrics.reduce((sum, m) => sum + m.avg_lead_time_days, 0) / typeMetrics.length
-      ),
-      capacity_utilization:
-        (typeMetrics.reduce((sum, m) => sum + m.capacity_utilization, 0) / typeMetrics.length) * 100,
+      avg_lead_time_days: latest.avg_lead_time_days,
       bottleneck_detected: typeMetrics.some(m => m.bottleneck_detected),
-      crewCount: typeMetrics[0]?.crewCount || 0,
-      totalLeads: typeMetrics[0]?.totalLeads || 0,
-      totalSupervisors: typeMetrics[0]?.totalSupervisors || 0,
+      crewCount: latest.crewCount || 0,
+      totalLeads: latest.totalLeads || 0,
+      totalSupervisors: latest.totalSupervisors || 0,
     };
   };
 
@@ -276,12 +279,6 @@ export default function MetricsDashboard() {
                   unit="projected"
                   type="shingle"
                 />
-                <MetricsCard
-                  title="Utilization"
-                  value={shingleStats.capacity_utilization.toFixed(1)}
-                  unit="%"
-                  type="shingle"
-                />
               </div>
             </div>
 
@@ -332,12 +329,6 @@ export default function MetricsDashboard() {
                   title="Revenue"
                   value={`$${(metalStats.revenue_projected / 1000000).toFixed(1)}M`}
                   unit="projected"
-                  type="metal"
-                />
-                <MetricsCard
-                  title="Utilization"
-                  value={metalStats.capacity_utilization.toFixed(1)}
-                  unit="%"
                   type="metal"
                 />
               </div>
@@ -412,7 +403,6 @@ export default function MetricsDashboard() {
                     <th className="px-4 py-3 text-right font-medium text-gray-700">Sales Fcst</th>
                     <th className="px-4 py-3 text-right font-medium text-gray-700">Production</th>
                     <th className="px-4 py-3 text-right font-medium text-gray-700">Lead Time</th>
-                    <th className="px-4 py-3 text-right font-medium text-gray-700">Utilization</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -444,7 +434,6 @@ export default function MetricsDashboard() {
                               {leadTimeWeeks}w
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-right text-gray-900">{(m.capacity_utilization * 100).toFixed(1)}%</td>
                         </tr>
                       );
                     })}
