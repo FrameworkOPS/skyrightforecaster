@@ -152,8 +152,8 @@ export default function CustomProjectsManagement() {
     setFormData({
       crew_id: project.crew_id,
       project_name: project.project_name,
-      start_date: project.start_date,
-      end_date: project.end_date,
+      start_date: project.start_date?.split('T')[0] ?? project.start_date,
+      end_date: project.end_date?.split('T')[0] ?? project.end_date,
       notes: project.notes,
     });
     setSelectedCrewId(project.crew_id);

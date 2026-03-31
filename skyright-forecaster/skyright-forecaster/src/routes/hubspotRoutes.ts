@@ -21,6 +21,6 @@ router.use(authenticateToken);
 
 router.get('/status', getHubSpotStatus);
 router.get('/pipeline-summary', getPipelineSummary);
-router.post('/sync', authorize('admin', 'manager'), syncJobs);
+router.post('/sync', syncJobs);
 
 export default router;

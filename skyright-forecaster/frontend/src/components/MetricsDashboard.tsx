@@ -58,7 +58,10 @@ export default function MetricsDashboard() {
   };
 
   const formatDate = (date: Date): string => {
-    return date.toISOString().split('T')[0];
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   };
 
   const loadMetrics = async () => {
@@ -164,7 +167,7 @@ export default function MetricsDashboard() {
   )
     .sort((a, b) => new Date(a.metric_week).getTime() - new Date(b.metric_week).getTime())
     .map(m => ({
-      week: new Date(m.metric_week).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      week: new Date(m.metric_week + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       fullWeek: m.metric_week,
       shinglePipeline: shingleMetrics.find(s => s.metric_week === m.metric_week)?.pipeline_sqs || 0,
       metalPipeline: metalMetrics.find(s => s.metric_week === m.metric_week)?.pipeline_sqs || 0,
@@ -426,7 +429,7 @@ export default function MetricsDashboard() {
                       return (
                         <tr key={idx} className="hover:bg-gray-50">
                           <td className="px-4 py-3 font-medium text-gray-900">
-                            {new Date(m.metric_week).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            {new Date(m.metric_week + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                           </td>
                           <td className="px-4 py-3">
                             <span className={`px-2 py-1 rounded text-xs font-semibold ${badgeClass}`}>

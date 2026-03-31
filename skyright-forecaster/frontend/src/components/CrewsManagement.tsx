@@ -28,9 +28,24 @@ interface CrewFormData {
   weekly_sq_capacity?: number;
 }
 
+interface CrewStaff {
+  crew_id: string;
+  lead_count: number;
+  super_count: number;
+}
+
+interface StaffFormData {
+  leadCount: number;
+  superCount: number;
+}
+
 export default function CrewsManagement() {
   const { token } = useAuthStore();
   const [crews, setCrews] = useState<Crew[]>([]);
+  const [staffData, setStaffData] = useState<Record<string, CrewStaff>>({});
+  const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
+  const [staffForm, setStaffForm] = useState<StaffFormData>({ leadCount: 0, superCount: 0 });
+  const [savingStaff, setSavingStaff] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +65,51 @@ export default function CrewsManagement() {
     loadCrews();
   }, []);
 
+  const loadStaff = async (crewList: Crew[]) => {
+    const entries = await Promise.all(
+      crewList.map(async (crew) => {
+        const res = await fetch(`${API_BASE_URL}/api/crew-staff/crew/${crew.id}`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return [crew.id, { crew_id: crew.id, lead_count: data.data.lead_count ?? 0, super_count: data.data.super_count ?? 0 }] as [string, CrewStaff];
+        }
+        return [crew.id, { crew_id: crew.id, lead_count: 0, super_count: 0 }] as [string, CrewStaff];
+      })
+    );
+    setStaffData(Object.fromEntries(entries));
+  };
+
+  const handleSaveStaff = async (crewId: string) => {
+    setSavingStaff(true);
+    try {
+      const today = new Date();
+      const addedDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const res = await fetch(`${API_BASE_URL}/api/crew-staff`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          crewId,
+          leadCount: staffForm.leadCount,
+          superCount: staffForm.superCount,
+          addedDate,
+        }),
+      });
+      if (res.ok) {
+        setStaffData(prev => ({
+          ...prev,
+          [crewId]: { crew_id: crewId, lead_count: staffForm.leadCount, super_count: staffForm.superCount },
+        }));
+        setEditingStaffId(null);
+      }
+    } catch (err) {
+      console.error('Error saving staff:', err);
+    } finally {
+      setSavingStaff(false);
+    }
+  };
+
   const loadCrews = async () => {
     setLoading(true);
     try {
@@ -59,7 +119,9 @@ export default function CrewsManagement() {
 
       if (res.ok) {
         const data = await res.json();
-        setCrews(data.data || []);
+        const crewList = data.data || [];
+        setCrews(crewList);
+        await loadStaff(crewList);
       }
     } catch (error) {
       console.error('Error loading crews:', error);
@@ -131,8 +193,8 @@ export default function CrewsManagement() {
       crew_type: crew.crew_type,
       team_members: crew.team_members,
       training_period_days: crew.training_period_days,
-      start_date: crew.start_date,
-      terminate_date: crew.terminate_date,
+      start_date: crew.start_date?.split('T')[0] ?? crew.start_date,
+      terminate_date: crew.terminate_date?.split('T')[0] ?? crew.terminate_date,
       revenue_per_sq: crew.revenue_per_sq,
       weekly_sq_capacity: crew.weekly_sq_capacity ?? (crew.crew_type === 'shingle' ? 200 : 100),
     });
@@ -328,6 +390,7 @@ export default function CrewsManagement() {
                 </th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">$/sq</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">SQs/wk</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">Staff</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">Actions</th>
               </tr>
             </thead>
@@ -357,6 +420,68 @@ export default function CrewsManagement() {
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-900">
                     {crew.weekly_sq_capacity != null ? crew.weekly_sq_capacity.toFixed(0) : '—'}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-900 min-w-48">
+                    {editingStaffId === crew.id ? (
+                      <div className="space-y-2">
+                        {crew.crew_type === 'shingle' ? (
+                          <div>
+                            <label className="text-xs text-gray-600">Site Supervisors</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={staffForm.superCount}
+                              onChange={(e) => setStaffForm(prev => ({ ...prev, superCount: parseInt(e.target.value) || 0 }))}
+                              className="mt-1 block w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                            />
+                          </div>
+                        ) : (
+                          <div>
+                            <label className="text-xs text-gray-600">Crew Leads</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={staffForm.leadCount}
+                              onChange={(e) => setStaffForm(prev => ({ ...prev, leadCount: parseInt(e.target.value) || 0 }))}
+                              className="mt-1 block w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                            />
+                          </div>
+                        )}
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => handleSaveStaff(crew.id)}
+                            disabled={savingStaff}
+                            className="px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600 disabled:opacity-50"
+                          >
+                            {savingStaff ? '...' : 'Save'}
+                          </button>
+                          <button
+                            onClick={() => setEditingStaffId(null)}
+                            className="px-2 py-1 bg-gray-300 text-gray-700 text-xs rounded hover:bg-gray-400"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-700">
+                          {crew.crew_type === 'shingle'
+                            ? `Sups: ${staffData[crew.id]?.super_count ?? 0}`
+                            : `Leads: ${staffData[crew.id]?.lead_count ?? 0}`}
+                        </span>
+                        <button
+                          onClick={() => {
+                            const s = staffData[crew.id];
+                            setStaffForm({ leadCount: s?.lead_count ?? 0, superCount: s?.super_count ?? 0 });
+                            setEditingStaffId(crew.id);
+                          }}
+                          className="text-xs text-blue-600 hover:text-blue-800 underline"
+                        >
+                          Update
+                        </button>
+                      </div>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-sm space-x-2">
                     <button

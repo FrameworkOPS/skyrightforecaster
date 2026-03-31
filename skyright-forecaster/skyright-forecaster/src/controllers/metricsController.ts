@@ -160,8 +160,9 @@ export const calculateWeeklyMetrics = asyncHandler(async (req: Request, res: Res
   const revenueProjected = (pipelineSQs + salesForecastSQs) * revenuePerSq;
   const revenueProduced = productionActualSQs * revenuePerSq;
 
-  // 6. Capacity utilization
-  const capacityUtilization = calculateCapacityUtilization(productionActualSQs, totalCapacitySQs);
+  // 6. Capacity utilization — fall back to production rate estimate when no actuals recorded
+  const effectiveProductionSQs = productionActualSQs > 0 ? productionActualSQs : productionRate;
+  const capacityUtilization = calculateCapacityUtilization(effectiveProductionSQs, totalCapacitySQs);
 
   // 7. Bottleneck detection
   const [bottleneckDetected, bottleneckReason] = detectProductionBottleneck(

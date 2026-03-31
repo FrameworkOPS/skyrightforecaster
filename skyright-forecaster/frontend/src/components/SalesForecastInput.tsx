@@ -48,7 +48,10 @@ export default function SalesForecastInput() {
   };
 
   const formatDate = (date: Date): string => {
-    return date.toISOString().split('T')[0];
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   };
 
   const getNextMonday = (dateStr: string): string => {
@@ -169,8 +172,8 @@ export default function SalesForecastInput() {
     const weeks: string[] = [];
     if (!startWeek || !endWeek) return weeks;
 
-    let current = new Date(startWeek);
-    const end = new Date(endWeek);
+    let current = new Date(startWeek + 'T00:00:00');
+    const end = new Date(endWeek + 'T00:00:00');
 
     while (current <= end) {
       weeks.push(formatDate(current));
@@ -183,7 +186,7 @@ export default function SalesForecastInput() {
   const weeks = getWeeks();
   const isCurrentWeek = (week: string): boolean => {
     const today = new Date();
-    const weekDate = new Date(week);
+    const weekDate = new Date(week + 'T00:00:00');
     const daysDiff = (today.getTime() - weekDate.getTime()) / (1000 * 60 * 60 * 24);
     return daysDiff >= 0 && daysDiff < 7;
   };
@@ -270,7 +273,7 @@ export default function SalesForecastInput() {
                     className={`${isCurrent ? 'bg-blue-50' : 'hover:bg-gray-50'} ${new Date(week) < new Date() ? 'opacity-60' : ''}`}
                   >
                     <td className="px-4 py-3 text-gray-900 font-medium">
-                      {new Date(week).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+                      {new Date(week + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
                       {isCurrent && <span className="ml-2 text-xs bg-blue-600 text-white px-2 py-1 rounded">Current</span>}
                     </td>
                     <td className="px-4 py-3">

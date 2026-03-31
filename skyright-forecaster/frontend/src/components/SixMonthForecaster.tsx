@@ -18,7 +18,8 @@ interface ForecastWeek {
   production_rate_metal: number;
   sales_forecast_shingles: number;
   sales_forecast_metal: number;
-  avg_lead_time_weeks: number;
+  lead_time_weeks_shingle: number;
+  lead_time_weeks_metal: number;
   crew_changes: CrewEvent[];
   custom_projects: Array<{ name: string; start_date: string; end_date: string }>;
 }
@@ -68,7 +69,7 @@ export default function SixMonthForecaster() {
   };
 
   const getWeekLabel = (weekStr: string): string => {
-    return new Date(weekStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return new Date(weekStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
   return (
@@ -148,14 +149,13 @@ export default function SixMonthForecaster() {
                     <th className="px-4 py-3 text-right font-medium text-gray-700">Sales (M)</th>
                   </>
                 )}
-                <th className="px-4 py-3 text-center font-medium text-gray-700">Lead Time</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-700">Lead Time (S)</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-700">Lead Time (M)</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Events</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {forecastData.map((week) => {
-                const leadTimeStatus = getLeadTimeStatus(week.avg_lead_time_weeks);
-                const colorClass = getLeadTimeColorClass(leadTimeStatus);
                 const hasEvents = week.crew_changes.length > 0 || week.custom_projects.length > 0;
 
                 return (
@@ -190,8 +190,13 @@ export default function SixMonthForecaster() {
                       </>
                     )}
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded text-xs font-semibold text-center block ${colorClass}`}>
-                        {week.avg_lead_time_weeks}w
+                      <span className={`px-2 py-1 rounded text-xs font-semibold text-center block ${getLeadTimeColorClass(getLeadTimeStatus(week.lead_time_weeks_shingle))}`}>
+                        {week.lead_time_weeks_shingle}w
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded text-xs font-semibold text-center block ${getLeadTimeColorClass(getLeadTimeStatus(week.lead_time_weeks_metal))}`}>
+                        {week.lead_time_weeks_metal}w
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs">

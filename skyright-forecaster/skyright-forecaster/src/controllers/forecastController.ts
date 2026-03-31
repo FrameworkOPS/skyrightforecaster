@@ -582,14 +582,13 @@ export const getSixMonthForecast = asyncHandler(async (req: Request, res: Respon
       productionByType[crew.crew_type] = (productionByType[crew.crew_type] || 0) + crewCapacity * rampUp * rampDown;
     }
 
-    // Lead time: rolling pipeline SQs / weekly production rate
-    const shingleLeadWeeks = productionByType.shingle > 0
+    // Lead time per job type: rolling pipeline SQs / weekly production rate
+    const shingleLeadWeeks = Math.round(productionByType.shingle > 0
       ? rollingPipelineShingle / productionByType.shingle
-      : 0;
-    const metalLeadWeeks = productionByType.metal > 0
+      : 0);
+    const metalLeadWeeks = Math.round(productionByType.metal > 0
       ? rollingPipelineMetal / productionByType.metal
-      : 0;
-    const avgLeadTimeWeeks = Math.round(Math.max(shingleLeadWeeks, metalLeadWeeks));
+      : 0);
 
     // Get crew changes for this week
     const crewAddResult = await query(
@@ -625,7 +624,8 @@ export const getSixMonthForecast = asyncHandler(async (req: Request, res: Respon
       production_rate_metal: Math.round(productionByType.metal),
       sales_forecast_shingles: salesByType.shingle || 0,
       sales_forecast_metal: salesByType.metal || 0,
-      avg_lead_time_weeks: avgLeadTimeWeeks,
+      lead_time_weeks_shingle: shingleLeadWeeks,
+      lead_time_weeks_metal: metalLeadWeeks,
       crew_changes: crewChanges,
       custom_projects: customProjects,
     });
