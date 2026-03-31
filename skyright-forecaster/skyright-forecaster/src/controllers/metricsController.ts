@@ -220,6 +220,12 @@ export const getMetricsDashboardData = asyncHandler(async (req: Request, res: Re
     pipelineJobsByType[r.job_type] = parseInt(r.job_count) || 0;
   });
 
+  // Helper: pg returns DATE columns as JS Date objects; convert to 'yyyy-MM-dd' string
+  const toDateStr = (d: any): string => {
+    if (d instanceof Date) return d.toISOString().split('T')[0];
+    return String(d).substring(0, 10);
+  };
+
   // ── 2. All active crews (with capacity) ──────────────────────────────────
   const crewsResult = await query(
     `SELECT id, crew_name, crew_type, training_period_days, start_date, terminate_date, weekly_sq_capacity
@@ -232,7 +238,12 @@ export const getMetricsDashboardData = asyncHandler(async (req: Request, res: Re
   const projectsResult = await query(
     `SELECT crew_id, start_date, end_date FROM custom_projects WHERE is_active = true`
   );
-  const allProjects = projectsResult.rows;
+  // Normalise dates to strings immediately so comparisons work regardless of pg type parsing
+  const allProjects = projectsResult.rows.map((p: any) => ({
+    crew_id: p.crew_id,
+    start_date: toDateStr(p.start_date),
+    end_date: toDateStr(p.end_date),
+  }));
 
   // ── 4. All sales forecasts for the date range ────────────────────────────
   const salesResult = await query(
@@ -250,13 +261,21 @@ export const getMetricsDashboardData = asyncHandler(async (req: Request, res: Re
   });
 
   // ── 5. Staff counts per job type (leads & supervisors) ───────────────────
+  // Use LATERAL JOIN so every active crew contributes even if it has no staff record.
+  // For each crew we pick only its most recent staff entry to avoid double-counting.
   const staffResult = await query(
     `SELECT c.crew_type,
-            COALESCE(SUM(cs.lead_count), 0) as total_leads,
-            COALESCE(SUM(cs.super_count), 0) as total_supers
-     FROM crew_staff cs
-     JOIN crews c ON cs.crew_id = c.id
-     WHERE c.is_active = true AND cs.is_active = true
+            COALESCE(SUM(latest_cs.lead_count), 0) as total_leads,
+            COALESCE(SUM(latest_cs.super_count), 0) as total_supers
+     FROM crews c
+     LEFT JOIN LATERAL (
+       SELECT lead_count, super_count
+       FROM crew_staff
+       WHERE crew_id = c.id
+       ORDER BY added_date DESC, created_at DESC
+       LIMIT 1
+     ) latest_cs ON true
+     WHERE c.is_active = true
      GROUP BY c.crew_type`
   );
   const staffByType: Record<string, { leads: number; supers: number }> = {};
@@ -290,22 +309,23 @@ export const getMetricsDashboardData = asyncHandler(async (req: Request, res: Re
       for (const crew of allCrews) {
         if (crew.crew_type !== jobType) continue;
 
-        // Skip crew if it hasn't started yet or has been terminated
-        const crewStart = new Date(crew.start_date + 'T00:00:00');
-        if (crewStart > weekDate) continue;
+        // Skip crew if it hasn't started yet or has been terminated.
+        // Compare as 'yyyy-MM-dd' strings — safe and timezone-neutral.
+        const crewStartStr = toDateStr(crew.start_date);
+        if (weekStr < crewStartStr) continue;
         if (crew.terminate_date) {
-          const crewEnd = new Date(crew.terminate_date + 'T00:00:00');
-          if (crewEnd < weekDate) continue;
+          const crewEndStr = toDateStr(crew.terminate_date);
+          if (weekStr > crewEndStr) continue;
         }
 
         crewCount++;
 
-        // Zero out if crew is blocked by a custom project this week
+        // Zero out if crew is blocked by a custom project this week.
+        // allProjects dates are already normalised to 'yyyy-MM-dd' strings so
+        // string comparison is safe and avoids any JS Date parsing issues.
         const isBlocked = allProjects.some((p: any) => {
           if (p.crew_id !== crew.id) return false;
-          const pStart = new Date(p.start_date + 'T00:00:00');
-          const pEnd = new Date(p.end_date + 'T00:00:00');
-          return weekDate >= pStart && weekDate <= pEnd;
+          return weekStr >= p.start_date && weekStr <= p.end_date;
         });
 
         if (isBlocked) continue;

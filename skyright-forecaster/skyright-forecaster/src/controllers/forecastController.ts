@@ -538,11 +538,22 @@ export const getSixMonthForecast = asyncHandler(async (req: Request, res: Respon
   );
   const allCrews = crewsResult.rows;
 
+  // Helper: pg returns DATE columns as JS Date objects; convert to 'yyyy-MM-dd' string
+  const toDateStr = (d: any): string => {
+    if (d instanceof Date) return d.toISOString().split('T')[0];
+    return String(d).substring(0, 10);
+  };
+
   // Fetch all active custom projects upfront — used to zero out crew capacity during project periods
   const allProjectsResult = await query(
     `SELECT crew_id, start_date, end_date FROM custom_projects WHERE is_active = true`
   );
-  const allCustomProjects = allProjectsResult.rows;
+  // Normalise dates to strings so string comparison works correctly
+  const allCustomProjects = allProjectsResult.rows.map((p: any) => ({
+    crew_id: p.crew_id,
+    start_date: toDateStr(p.start_date),
+    end_date: toDateStr(p.end_date),
+  }));
 
   // Fallback base capacity per crew type if weekly_sq_capacity not set
   const DEFAULT_SQ_CAPACITY: Record<string, number> = { shingle: 200, metal: 100 };
@@ -583,12 +594,11 @@ export const getSixMonthForecast = asyncHandler(async (req: Request, res: Respon
         rampDown = calculateCrewRampDownMultiplier(crew.terminate_date, weekDate);
       }
 
-      // Check if this crew is blocked by a custom project during this week
+      // Check if this crew is blocked by a custom project during this week.
+      // Dates are already 'yyyy-MM-dd' strings so string comparison is safe.
       const isBlockedByProject = allCustomProjects.some((p: any) => {
         if (p.crew_id !== crew.id) return false;
-        const pStart = new Date(p.start_date + 'T00:00:00');
-        const pEnd = new Date(p.end_date + 'T00:00:00');
-        return weekDate >= pStart && weekDate <= pEnd;
+        return weekStr >= p.start_date && weekStr <= p.end_date;
       });
 
       // Use crew's own weekly_sq_capacity, fallback to default by type
