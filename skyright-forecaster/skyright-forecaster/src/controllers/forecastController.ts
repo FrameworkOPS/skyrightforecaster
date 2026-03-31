@@ -538,6 +538,12 @@ export const getSixMonthForecast = asyncHandler(async (req: Request, res: Respon
   );
   const allCrews = crewsResult.rows;
 
+  // Fetch all active custom projects upfront — used to zero out crew capacity during project periods
+  const allProjectsResult = await query(
+    `SELECT crew_id, start_date, end_date FROM custom_projects WHERE is_active = true`
+  );
+  const allCustomProjects = allProjectsResult.rows;
+
   // Fallback base capacity per crew type if weekly_sq_capacity not set
   const DEFAULT_SQ_CAPACITY: Record<string, number> = { shingle: 200, metal: 100 };
 
@@ -562,7 +568,8 @@ export const getSixMonthForecast = asyncHandler(async (req: Request, res: Respon
       salesByType[row.job_type] = parseFloat(row.sqs) || 0;
     });
 
-    // Calculate effective production rate per type from active crews
+    // Calculate effective production rate per type from active crews.
+    // Crews assigned to a custom project this week contribute 0 capacity.
     const productionByType: { [key: string]: number } = { shingle: 0, metal: 0 };
     for (const crew of allCrews) {
       const daysElapsed = daysBetween(crew.start_date, weekStr);
@@ -575,11 +582,22 @@ export const getSixMonthForecast = asyncHandler(async (req: Request, res: Respon
       if (crew.terminate_date) {
         rampDown = calculateCrewRampDownMultiplier(crew.terminate_date, weekDate);
       }
+
+      // Check if this crew is blocked by a custom project during this week
+      const isBlockedByProject = allCustomProjects.some((p: any) => {
+        if (p.crew_id !== crew.id) return false;
+        const pStart = new Date(p.start_date + 'T00:00:00');
+        const pEnd = new Date(p.end_date + 'T00:00:00');
+        return weekDate >= pStart && weekDate <= pEnd;
+      });
+
       // Use crew's own weekly_sq_capacity, fallback to default by type
       const crewCapacity = crew.weekly_sq_capacity
         ? parseFloat(crew.weekly_sq_capacity)
         : (DEFAULT_SQ_CAPACITY[crew.crew_type] || 100);
-      productionByType[crew.crew_type] = (productionByType[crew.crew_type] || 0) + crewCapacity * rampUp * rampDown;
+
+      const effectiveMult = isBlockedByProject ? 0 : rampUp * rampDown;
+      productionByType[crew.crew_type] = (productionByType[crew.crew_type] || 0) + crewCapacity * effectiveMult;
     }
 
     // Lead time per job type: rolling pipeline SQs / weekly production rate
@@ -604,7 +622,7 @@ export const getSixMonthForecast = asyncHandler(async (req: Request, res: Respon
       ...crewRemoveResult.rows.map((c: any) => ({ type: 'removed' as const, crew_name: c.crew_name, crew_type: c.crew_type, date: weekStr })),
     ];
 
-    // Get custom projects for this week
+    // Get custom projects active this week (for display in the UI)
     const projectsResult = await query(
       `SELECT project_name, start_date, end_date FROM custom_projects
        WHERE is_active = true AND start_date <= $1::date AND end_date >= $2::date`,

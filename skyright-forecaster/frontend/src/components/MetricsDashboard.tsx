@@ -81,31 +81,27 @@ export default function MetricsDashboard() {
       });
 
       if (res.ok) {
-        const data = await res.json();
-        const metricsData = data.data || [];
-        setMetrics(metricsData);
-
-        // Auto-calculate metrics for current week if no data exists yet
-        if (metricsData.length === 0) {
-          const weekStr = formatDate(start);
-          await Promise.all([
-            fetch(`${API_BASE_URL}/api/metrics/calculate?week=${weekStr}&jobType=shingle`, {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${token}` },
-            }),
-            fetch(`${API_BASE_URL}/api/metrics/calculate?week=${weekStr}&jobType=metal`, {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${token}` },
-            }),
-          ]);
-          // Reload after calculation
-          const res2 = await fetch(`${API_BASE_URL}/api/metrics/dashboard?${params}`, {
+        // Always recalculate the current week so production rate and sales
+        // forecast reflect the latest crews, custom projects, and forecast entries
+        const weekStr = formatDate(start);
+        await Promise.all([
+          fetch(`${API_BASE_URL}/api/metrics/calculate?week=${weekStr}&jobType=shingle`, {
+            method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` },
-          });
-          if (res2.ok) {
-            const data2 = await res2.json();
-            setMetrics(data2.data || []);
-          }
+          }),
+          fetch(`${API_BASE_URL}/api/metrics/calculate?week=${weekStr}&jobType=metal`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+          }),
+        ]);
+
+        // Reload after recalculation to pick up fresh values
+        const res2 = await fetch(`${API_BASE_URL}/api/metrics/dashboard?${params}`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (res2.ok) {
+          const data2 = await res2.json();
+          setMetrics(data2.data || []);
         }
       }
     } catch (error) {
