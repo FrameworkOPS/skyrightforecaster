@@ -120,12 +120,13 @@ export default function MetricsDashboard() {
     const latest = sorted[sorted.length - 1];
 
     return {
-      // pipeline is current snapshot from most recent week
+      // pipeline: current snapshot (same value every week — use latest)
       pipeline_sqs: latest.pipeline_sqs,
-      // production rate and sales forecast are per-week rates — use most recent week's value
-      sales_forecast_sqs: latest.sales_forecast_sqs,
+      // sales forecast: SUM across the full 12-week window
+      sales_forecast_sqs: typeMetrics.reduce((sum, m) => sum + m.sales_forecast_sqs, 0),
+      // production rate: weekly capacity (use latest week's value)
       production_rate_sqs: latest.production_rate_sqs,
-      // revenue totals can be summed across the 12-week window
+      // revenue: sum across the 12-week window
       revenue_projected: typeMetrics.reduce((sum, m) => sum + m.revenue_projected, 0),
       revenue_produced: typeMetrics.reduce((sum, m) => sum + m.revenue_produced, 0),
       avg_lead_time_days: latest.avg_lead_time_days,
@@ -223,7 +224,7 @@ export default function MetricsDashboard() {
                 <MetricsCard
                   title="Sales Forecast"
                   value={shingleStats.sales_forecast_sqs.toFixed(0)}
-                  unit="SQs"
+                  unit="SQs next 12 wks"
                   type="shingle"
                 />
                 <MetricsCard

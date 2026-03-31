@@ -261,20 +261,20 @@ export const getMetricsDashboardData = asyncHandler(async (req: Request, res: Re
   });
 
   // ── 5. Staff counts per job type (leads & supervisors) ───────────────────
-  // Use LATERAL JOIN so every active crew contributes even if it has no staff record.
-  // For each crew we pick only its most recent staff entry to avoid double-counting.
+  // DISTINCT ON picks the most recent crew_staff row per crew (ordered by
+  // added_date DESC). Left-join back to crews so crews with no staff row
+  // still contribute 0 rather than being excluded from the aggregate.
   const staffResult = await query(
-    `SELECT c.crew_type,
-            COALESCE(SUM(latest_cs.lead_count), 0) as total_leads,
-            COALESCE(SUM(latest_cs.super_count), 0) as total_supers
-     FROM crews c
-     LEFT JOIN LATERAL (
-       SELECT lead_count, super_count
+    `WITH latest_staff AS (
+       SELECT DISTINCT ON (crew_id) crew_id, lead_count, super_count
        FROM crew_staff
-       WHERE crew_id = c.id
-       ORDER BY added_date DESC, created_at DESC
-       LIMIT 1
-     ) latest_cs ON true
+       ORDER BY crew_id, added_date DESC, created_at DESC
+     )
+     SELECT c.crew_type,
+            COALESCE(SUM(ls.lead_count), 0) AS total_leads,
+            COALESCE(SUM(ls.super_count), 0) AS total_supers
+     FROM crews c
+     LEFT JOIN latest_staff ls ON ls.crew_id = c.id
      WHERE c.is_active = true
      GROUP BY c.crew_type`
   );
