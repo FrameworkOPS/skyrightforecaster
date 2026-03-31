@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { query } from '../config/database';
-import HubSpotService from '../services/hubspotService';
+import HubSpotService, { RoofingSquaresSummary } from '../services/hubspotService';
 import { AppError, asyncHandler } from '../middleware/errorHandler';
 import { getUUID } from '../utils/uuid';
 import { CLOSING_RATE, CREW_TYPE_RATIOS, REVENUE_PER_SQ } from '../constants/businessConstants';
@@ -142,17 +142,23 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
     if (clientId && hubspotAccessToken) {
       try {
         const hubspotService = new HubSpotService(hubspotAccessToken);
-        const hubspotDeals = await hubspotService.fetchPendingJobs(50);
+
+        // Fetch Contract Signed deals and T/O to Production tickets in parallel
+        const [hubspotDeals, productionTickets] = await Promise.all([
+          hubspotService.fetchPendingJobs(50),
+          hubspotService.fetchProductionTickets(100),
+        ]);
 
         const deals = hubspotDeals.map((deal: any) => {
           const amount = deal.properties?.amount ? parseFloat(deal.properties.amount) : 0;
-          const jobType = deal.properties?.dealstage?.includes('metal') ? 'metal' : 'shingle';
+          const rawJobType: string = deal.properties?.job_type || '';
+          const jobType = rawJobType === 'Metal Roofing' ? 'metal' : 'shingles';
 
           return {
             hubspot_id: deal.id,
             dealname: deal.properties?.dealname || 'Unnamed Deal',
             amount,
-            inferred_job_type: jobType,
+            job_type: jobType,
             weighted_value: amount * CLOSING_RATE * (jobType === 'metal' ? CREW_TYPE_RATIOS.metal : CREW_TYPE_RATIOS.shingles),
             estimated_sqs: (amount * CLOSING_RATE * (jobType === 'metal' ? CREW_TYPE_RATIOS.metal : CREW_TYPE_RATIOS.shingles)) / (jobType === 'metal' ? REVENUE_PER_SQ.metal : REVENUE_PER_SQ.shingles),
           };
@@ -161,12 +167,16 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
         const totalWeightedValue = deals.reduce((sum: number, d: any) => sum + d.weighted_value, 0);
         const totalWeightedSqs = deals.reduce((sum: number, d: any) => sum + d.estimated_sqs, 0);
 
+        // Aggregate actual roof squares from T/O to Production tickets by type
+        const roofingSquares: RoofingSquaresSummary = hubspotService.aggregateRoofingSquares(productionTickets);
+
         return res.json({
           success: true,
           data: {
             deals,
             totalWeightedValue,
             totalWeightedSqs,
+            roofingSquares,
             message: 'HubSpot pipeline summary (live data)',
             source: 'HubSpot API',
           },
@@ -183,7 +193,7 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
         hubspot_id: 'deal-1',
         dealname: 'Commercial Roofing Project - Downtown',
         amount: 45000,
-        inferred_job_type: 'shingle',
+        job_type: 'shingles',
         weighted_value: 45000 * CLOSING_RATE * CREW_TYPE_RATIOS.shingles,
         estimated_sqs: (45000 * CLOSING_RATE * CREW_TYPE_RATIOS.shingles) / REVENUE_PER_SQ.shingles,
       },
@@ -191,7 +201,7 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
         hubspot_id: 'deal-2',
         dealname: 'Metal Roofing - Industrial Complex',
         amount: 75000,
-        inferred_job_type: 'metal',
+        job_type: 'metal',
         weighted_value: 75000 * CLOSING_RATE * CREW_TYPE_RATIOS.metal,
         estimated_sqs: (75000 * CLOSING_RATE * CREW_TYPE_RATIOS.metal) / REVENUE_PER_SQ.metal,
       },
@@ -199,7 +209,7 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
         hubspot_id: 'deal-3',
         dealname: 'Residential Roof Replacement',
         amount: 28000,
-        inferred_job_type: 'shingle',
+        job_type: 'shingles',
         weighted_value: 28000 * CLOSING_RATE * CREW_TYPE_RATIOS.shingles,
         estimated_sqs: (28000 * CLOSING_RATE * CREW_TYPE_RATIOS.shingles) / REVENUE_PER_SQ.shingles,
       },
@@ -214,6 +224,7 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
         deals: mockDeals,
         totalWeightedValue,
         totalWeightedSqs,
+        roofingSquares: { metal: 0, shingles: 0 },
         message: 'HubSpot pipeline summary (mock data - configure real credentials to use live data)',
         source: 'Mock Data',
       },
