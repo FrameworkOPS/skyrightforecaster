@@ -367,7 +367,7 @@ export default function SalesForecastInput() {
                     <td className="px-4 py-3 text-xs space-x-1">
                       <button
                         onClick={() => {
-                          const d = new Date(week);
+                          const d = new Date(week + 'T00:00:00');
                           d.setDate(d.getDate() - 7);
                           const prevWeek = formatDate(d);
                           handleCopyPreviousWeek(prevWeek, week, 'shingle');
@@ -379,7 +379,7 @@ export default function SalesForecastInput() {
                       </button>
                       <button
                         onClick={() => {
-                          const d = new Date(week);
+                          const d = new Date(week + 'T00:00:00');
                           d.setDate(d.getDate() - 7);
                           const prevWeek = formatDate(d);
                           handleCopyPreviousWeek(prevWeek, week, 'metal');
