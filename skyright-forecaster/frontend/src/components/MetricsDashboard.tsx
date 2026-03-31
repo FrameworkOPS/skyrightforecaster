@@ -66,7 +66,7 @@ export default function MetricsDashboard() {
   const loadMetrics = async () => {
     setLoading(true);
     try {
-      // Calculate 12-week range
+      // 12-week window starting from the current Monday
       const today = new Date();
       const start = getMonday(today);
       const end = new Date(start);
@@ -76,33 +76,14 @@ export default function MetricsDashboard() {
       params.append('startWeek', formatDate(start));
       params.append('endWeek', formatDate(end));
 
+      // Dashboard endpoint now computes everything live — no cached snapshots
       const res = await fetch(`${API_BASE_URL}/api/metrics/dashboard?${params}`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
       if (res.ok) {
-        // Always recalculate the current week so production rate and sales
-        // forecast reflect the latest crews, custom projects, and forecast entries
-        const weekStr = formatDate(start);
-        await Promise.all([
-          fetch(`${API_BASE_URL}/api/metrics/calculate?week=${weekStr}&jobType=shingle`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` },
-          }),
-          fetch(`${API_BASE_URL}/api/metrics/calculate?week=${weekStr}&jobType=metal`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` },
-          }),
-        ]);
-
-        // Reload after recalculation to pick up fresh values
-        const res2 = await fetch(`${API_BASE_URL}/api/metrics/dashboard?${params}`, {
-          headers: { 'Authorization': `Bearer ${token}` },
-        });
-        if (res2.ok) {
-          const data2 = await res2.json();
-          setMetrics(data2.data || []);
-        }
+        const data = await res.json();
+        setMetrics(data.data || []);
       }
     } catch (error) {
       console.error('Error loading metrics:', error);

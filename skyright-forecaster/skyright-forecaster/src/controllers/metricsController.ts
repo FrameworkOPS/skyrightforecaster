@@ -200,88 +200,171 @@ export const calculateWeeklyMetrics = asyncHandler(async (req: Request, res: Res
 });
 
 export const getMetricsDashboardData = asyncHandler(async (req: Request, res: Response) => {
-  const { startWeek, endWeek, jobType } = req.query;
+  const { startWeek, endWeek } = req.query;
 
   if (!startWeek || !endWeek) {
     throw new AppError('Missing required parameters: startWeek and endWeek', 400);
   }
 
-  let whereClause = 'WHERE metric_week >= $1 AND metric_week <= $2';
-  const params: any[] = [startWeek, endWeek];
-  let paramCount = 3;
+  // ── 1. Live pipeline totals by job type ──────────────────────────────────
+  const pipelineResult = await query(
+    `SELECT job_type, COALESCE(SUM(square_footage), 0) as total_sqs, COUNT(*) as job_count
+     FROM pipeline_items
+     WHERE is_active = true AND status != 'completed'
+     GROUP BY job_type`
+  );
+  const pipelineByType: Record<string, number> = {};
+  const pipelineJobsByType: Record<string, number> = {};
+  pipelineResult.rows.forEach((r: any) => {
+    pipelineByType[r.job_type] = parseFloat(r.total_sqs) || 0;
+    pipelineJobsByType[r.job_type] = parseInt(r.job_count) || 0;
+  });
 
-  if (jobType) {
-    if (!['shingle', 'metal'].includes(jobType as string)) {
-      throw new AppError('jobType must be either "shingle" or "metal"', 400);
-    }
-    whereClause += ` AND job_type = $${paramCount}`;
-    params.push(jobType);
+  // ── 2. All active crews (with capacity) ──────────────────────────────────
+  const crewsResult = await query(
+    `SELECT id, crew_name, crew_type, training_period_days, start_date, terminate_date, weekly_sq_capacity
+     FROM crews WHERE is_active = true ORDER BY crew_type, crew_name`
+  );
+  const allCrews = crewsResult.rows;
+  const DEFAULT_SQ_CAPACITY: Record<string, number> = { shingle: 200, metal: 100 };
+
+  // ── 3. All active custom projects (crew blocking) ────────────────────────
+  const projectsResult = await query(
+    `SELECT crew_id, start_date, end_date FROM custom_projects WHERE is_active = true`
+  );
+  const allProjects = projectsResult.rows;
+
+  // ── 4. All sales forecasts for the date range ────────────────────────────
+  const salesResult = await query(
+    `SELECT forecast_week, job_type, COALESCE(projected_square_footage, 0) as sqs
+     FROM sales_forecast
+     WHERE forecast_week >= $1::date AND forecast_week <= $2::date`,
+    [startWeek, endWeek]
+  );
+  const salesByKey: Record<string, number> = {};
+  salesResult.rows.forEach((r: any) => {
+    const weekKey = r.forecast_week instanceof Date
+      ? r.forecast_week.toISOString().split('T')[0]
+      : String(r.forecast_week).substring(0, 10);
+    salesByKey[`${weekKey}_${r.job_type}`] = parseFloat(r.sqs) || 0;
+  });
+
+  // ── 5. Staff counts per job type (leads & supervisors) ───────────────────
+  const staffResult = await query(
+    `SELECT c.crew_type,
+            COALESCE(SUM(cs.lead_count), 0) as total_leads,
+            COALESCE(SUM(cs.super_count), 0) as total_supers
+     FROM crew_staff cs
+     JOIN crews c ON cs.crew_id = c.id
+     WHERE c.is_active = true AND cs.is_active = true
+     GROUP BY c.crew_type`
+  );
+  const staffByType: Record<string, { leads: number; supers: number }> = {};
+  staffResult.rows.forEach((r: any) => {
+    staffByType[r.crew_type] = {
+      leads: parseInt(r.total_leads) || 0,
+      supers: parseInt(r.total_supers) || 0,
+    };
+  });
+
+  // ── 6. Build week list ────────────────────────────────────────────────────
+  const weeks: string[] = [];
+  const cur = new Date((startWeek as string) + 'T00:00:00');
+  const endDate = new Date((endWeek as string) + 'T00:00:00');
+  while (cur <= endDate) {
+    weeks.push(cur.toISOString().split('T')[0]);
+    cur.setDate(cur.getDate() + 7);
   }
 
-  const result = await query(
-    `SELECT * FROM metrics_snapshots ${whereClause} ORDER BY metric_week ASC, job_type ASC`,
-    params
-  );
+  // ── 7. Compute one record per week × job type ─────────────────────────────
+  const data: any[] = [];
 
-  // Enhance metrics with color-coding and crew information
-  const enhancedData = await Promise.all(result.rows.map(async (metric: any) => {
-    // Calculate lead time in weeks
-    const leadTimeWeeks = Math.round(metric.avg_lead_time_days / 7);
-    const leadTimeStatus = getLeadTimeStatus(leadTimeWeeks);
+  for (const weekStr of weeks) {
+    const weekDate = new Date(weekStr + 'T00:00:00');
 
-    // Get crew counts for this metric week and job type
-    const weekDate = new Date(metric.metric_week);
-    const crewCountResult = await query(
-      `SELECT COUNT(*) as crew_count
-       FROM crews
-       WHERE crew_type = $1 AND is_active = true
-       AND start_date <= $2::date
-       AND (terminate_date IS NULL OR terminate_date >= $3::date)`,
-      [metric.job_type, metric.metric_week, metric.metric_week]
-    );
+    for (const jobType of ['shingle', 'metal']) {
+      // Production rate: sum each crew's effective capacity (0 if on a custom project)
+      let productionRate = 0;
+      let crewCount = 0;
 
-    const crewCount = parseInt(crewCountResult.rows[0]?.crew_count || 0);
+      for (const crew of allCrews) {
+        if (crew.crew_type !== jobType) continue;
 
-    // Get leads and supervisors count
-    const staffResult = await query(
-      `SELECT COALESCE(SUM(lead_count), 0) as total_leads, COALESCE(SUM(super_count), 0) as total_supers
-       FROM crew_staff
-       WHERE crew_id IN (
-         SELECT id FROM crews WHERE crew_type = $1 AND is_active = true
-       )
-       AND added_date <= $2::date
-       AND is_active = true`,
-      [metric.job_type, metric.metric_week]
-    );
+        // Skip crew if it hasn't started yet or has been terminated
+        const crewStart = new Date(crew.start_date + 'T00:00:00');
+        if (crewStart > weekDate) continue;
+        if (crew.terminate_date) {
+          const crewEnd = new Date(crew.terminate_date + 'T00:00:00');
+          if (crewEnd < weekDate) continue;
+        }
 
-    const totalLeads = parseInt(staffResult.rows[0]?.total_leads || 0);
-    const totalSupervisors = parseInt(staffResult.rows[0]?.total_supers || 0);
+        crewCount++;
 
-    return {
-      ...metric,
-      // Parse DECIMAL/NUMERIC columns that pg returns as strings
-      pipeline_sqs: parseFloat(metric.pipeline_sqs) || 0,
-      pipeline_jobs: parseInt(metric.pipeline_jobs) || 0,
-      sales_forecast_sqs: parseFloat(metric.sales_forecast_sqs) || 0,
-      production_rate_sqs: parseFloat(metric.production_rate_sqs) || 0,
-      revenue_projected: parseFloat(metric.revenue_projected) || 0,
-      revenue_produced: parseFloat(metric.revenue_produced) || 0,
-      queue_growth: parseFloat(metric.queue_growth) || 0,
-      avg_lead_time_days: parseInt(metric.avg_lead_time_days) || 0,
-      capacity_utilization: parseFloat(metric.capacity_utilization) || 0,
-      leadTimeWeeks,
-      leadTimeStatus,
-      crewCount,
-      totalLeads,
-      totalSupervisors,
-      revenue_per_sq: metric.job_type === 'shingle' ? REVENUE_PER_SQ.shingles : REVENUE_PER_SQ.metal
-    };
-  }));
+        // Zero out if crew is blocked by a custom project this week
+        const isBlocked = allProjects.some((p: any) => {
+          if (p.crew_id !== crew.id) return false;
+          const pStart = new Date(p.start_date + 'T00:00:00');
+          const pEnd = new Date(p.end_date + 'T00:00:00');
+          return weekDate >= pStart && weekDate <= pEnd;
+        });
 
-  res.json({
-    success: true,
-    data: enhancedData
-  });
+        if (isBlocked) continue;
+
+        const daysElapsed = daysBetween(crew.start_date, weekStr);
+        const rampUp = calculateCrewRampUpMultiplier(
+          crew.crew_type as 'shingle' | 'metal',
+          daysElapsed,
+          parseInt(crew.training_period_days)
+        );
+        let rampDown = 1.0;
+        if (crew.terminate_date) {
+          rampDown = calculateCrewRampDownMultiplier(crew.terminate_date, weekDate);
+        }
+
+        const crewCap = crew.weekly_sq_capacity
+          ? parseFloat(crew.weekly_sq_capacity)
+          : (DEFAULT_SQ_CAPACITY[jobType] || 100);
+
+        productionRate += crewCap * rampUp * rampDown;
+      }
+
+      const pipelineSqs = pipelineByType[jobType] || 0;
+      const salesForecastSqs = salesByKey[`${weekStr}_${jobType}`] || 0;
+      const revenuePerSq = jobType === 'shingle' ? REVENUE_PER_SQ.shingles : REVENUE_PER_SQ.metal;
+
+      // Lead time in days: (pipeline / weekly_rate) × 7
+      const avgLeadTimeDays = productionRate > 0
+        ? Math.round((pipelineSqs / productionRate) * 7)
+        : 0;
+      const leadTimeWeeks = Math.round(avgLeadTimeDays / 7);
+      const leadTimeStatus = getLeadTimeStatus(leadTimeWeeks);
+
+      const staff = staffByType[jobType] || { leads: 0, supers: 0 };
+
+      data.push({
+        metric_week: weekStr,
+        job_type: jobType,
+        pipeline_sqs: Math.round(pipelineSqs),
+        pipeline_jobs: pipelineJobsByType[jobType] || 0,
+        sales_forecast_sqs: Math.round(salesForecastSqs),
+        production_rate_sqs: Math.round(productionRate),
+        revenue_projected: Math.round((pipelineSqs + salesForecastSqs) * revenuePerSq),
+        revenue_produced: 0,
+        avg_lead_time_days: avgLeadTimeDays,
+        queue_growth: salesForecastSqs - productionRate,
+        bottleneck_detected: productionRate > 0 && (pipelineSqs / productionRate) > 8,
+        bottleneck_reason: null,
+        leadTimeWeeks,
+        leadTimeStatus,
+        crewCount,
+        totalLeads: staff.leads,
+        totalSupervisors: staff.supers,
+        revenue_per_sq: revenuePerSq,
+      });
+    }
+  }
+
+  res.json({ success: true, data });
 });
 
 export const getLeadTimeAnalysis = asyncHandler(async (req: Request, res: Response) => {
