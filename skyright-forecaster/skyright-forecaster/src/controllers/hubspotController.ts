@@ -152,7 +152,7 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
         const deals = hubspotDeals.map((deal: any) => {
           const amount = deal.properties?.amount ? parseFloat(deal.properties.amount) : 0;
           const rawJobType: string = deal.properties?.job_type || '';
-          const jobType = rawJobType === 'Metal Roof' ? 'metal' : 'shingles';
+          const jobType = rawJobType === 'Metal Roof' ? 'metal' : 'shingle';
 
           return {
             hubspot_id: deal.id,

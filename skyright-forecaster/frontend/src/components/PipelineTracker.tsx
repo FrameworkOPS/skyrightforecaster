@@ -16,10 +16,11 @@ interface PipelineItem {
   is_active: boolean;
 }
 
-interface CrewCapacity {
+interface Crew {
   id: string;
+  crew_name: string;
   crew_type: string;
-  sqs_per_week: number;
+  weekly_sq_capacity: number | null;
 }
 
 interface PipelineSummary {
@@ -28,59 +29,52 @@ interface PipelineSummary {
   combined?: { totalSQs: number; jobCount: number };
 }
 
+interface HubSpotSQs {
+  shingles: number;
+  metal: number;
+}
+
+const MANUAL_NOTE = 'Manual pipeline input';
 
 export default function PipelineTracker() {
   const { token } = useAuthStore();
   const [summary, setSummary] = useState<PipelineSummary | null>(null);
+  const [hubspotSQs, setHubspotSQs] = useState<HubSpotSQs | null>(null);
+  const [crews, setCrews] = useState<Crew[]>([]);
   const [loading, setLoading] = useState(false);
   const [savingPipeline, setSavingPipeline] = useState(false);
   const [pipelineError, setPipelineError] = useState<string | null>(null);
   const [showPipelineForm, setShowPipelineForm] = useState(false);
-  const [showCrewForm, setShowCrewForm] = useState(false);
-  const [crews, setCrews] = useState<CrewCapacity[]>([]);
-  const [pipelineData, setPipelineData] = useState({
-    shinglesSQS: '',
-    metalSQS: '',
-  });
-  const [crewFormData, setCrewFormData] = useState({
-    crew_type: 'shingle',
-    sqs_per_week: '',
-  });
+  const [pipelineData, setPipelineData] = useState({ shinglesSQS: '', metalSQS: '' });
 
   useEffect(() => {
     loadSummary();
     loadCrews();
+    loadHubSpotSQs();
   }, []);
+
+  // ─── Data loaders ──────────────────────────────────────────────────────────
 
   const loadCrews = async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/crews?active=true`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
-
       if (res.ok) {
         const data = await res.json();
-        // Transform crews data to include SQS per week (default values for now)
-        const crewsWithCapacity: CrewCapacity[] = (data.data || []).map((crew: any) => ({
-          id: crew.id,
-          crew_type: crew.crew_type,
-          sqs_per_week: crew.weekly_sq_capacity != null
-            ? parseFloat(crew.weekly_sq_capacity)
-            : (crew.crew_type === 'metal' ? 100 : 200),
-        }));
-        setCrews(crewsWithCapacity);
+        setCrews(data.data || []);
       }
-    } catch (error) {
-      console.error('Error loading crews:', error);
+    } catch (err) {
+      console.error('Error loading crews:', err);
     }
   };
 
   const loadSummary = async () => {
+    setLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/pipeline/summary`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
-
       if (res.ok) {
         const data = await res.json();
         const summaryData = data.data || {};
@@ -89,17 +83,39 @@ export default function PipelineTracker() {
         const metalRow = byType.find((r: any) => r.job_type === 'metal');
         const combined = summaryData.combined || {};
         setSummary({
-          shingles: shinglesRow ? { totalSQs: shinglesRow.total_sqs, jobCount: shinglesRow.job_count } : undefined,
-          metal: metalRow ? { totalSQs: metalRow.total_sqs, jobCount: metalRow.job_count } : undefined,
+          shingles: shinglesRow
+            ? { totalSQs: shinglesRow.total_sqs, jobCount: shinglesRow.job_count }
+            : undefined,
+          metal: metalRow
+            ? { totalSQs: metalRow.total_sqs, jobCount: metalRow.job_count }
+            : undefined,
           combined: { totalSQs: combined.total_sqs || 0, jobCount: combined.job_count || 0 },
         });
       }
-    } catch (error) {
-      console.error('Error loading summary:', error);
+    } catch (err) {
+      console.error('Error loading summary:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const MANUAL_NOTE = 'Manual pipeline input';
+  /** Pull live roofing SQs from HubSpot ticket pipeline (all production stages). */
+  const loadHubSpotSQs = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/hubspot/pipeline-summary`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const sqs = data.data?.roofingSquares;
+        if (sqs) setHubspotSQs({ shingles: sqs.shingles ?? 0, metal: sqs.metal ?? 0 });
+      }
+    } catch {
+      // HubSpot may not be configured — fail silently
+    }
+  };
+
+  // ─── Pipeline form ─────────────────────────────────────────────────────────
 
   const handleSavePipeline = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,9 +125,8 @@ export default function PipelineTracker() {
     const today = new Date().toISOString().split('T')[0];
 
     try {
-      // Fetch existing items to find any prior manual entries to update
       const listRes = await fetch(`${API_BASE_URL}/api/pipeline?activeOnly=true&limit=200`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       const listData = listRes.ok ? await listRes.json() : { data: [] };
       const existingItems: PipelineItem[] = listData.data || [];
@@ -127,58 +142,50 @@ export default function PipelineTracker() {
 
       const shingleSQs = parseFloat(pipelineData.shinglesSQS);
       if (!isNaN(shingleSQs) && shingleSQs > 0) {
-        if (manualShingle) {
-          saves.push(
-            fetch(`${API_BASE_URL}/api/pipeline/${manualShingle.id}`, {
-              method: 'PUT',
-              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ squareFootage: shingleSQs, revenuePerSq: 600 }),
-            })
-          );
-        } else {
-          saves.push(
-            fetch(`${API_BASE_URL}/api/pipeline`, {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jobType: 'shingle',
-                squareFootage: shingleSQs,
-                estimatedDaysToCompletion: 5,
-                revenuePerSq: 600,
-                addedDate: today,
-                notes: MANUAL_NOTE,
-              }),
-            })
-          );
-        }
+        saves.push(
+          manualShingle
+            ? fetch(`${API_BASE_URL}/api/pipeline/${manualShingle.id}`, {
+                method: 'PUT',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ squareFootage: shingleSQs, revenuePerSq: 600 }),
+              })
+            : fetch(`${API_BASE_URL}/api/pipeline`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  jobType: 'shingle',
+                  squareFootage: shingleSQs,
+                  estimatedDaysToCompletion: 5,
+                  revenuePerSq: 600,
+                  addedDate: today,
+                  notes: MANUAL_NOTE,
+                }),
+              })
+        );
       }
 
       const metalSQs = parseFloat(pipelineData.metalSQS);
       if (!isNaN(metalSQs) && metalSQs > 0) {
-        if (manualMetal) {
-          saves.push(
-            fetch(`${API_BASE_URL}/api/pipeline/${manualMetal.id}`, {
-              method: 'PUT',
-              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ squareFootage: metalSQs, revenuePerSq: 1000 }),
-            })
-          );
-        } else {
-          saves.push(
-            fetch(`${API_BASE_URL}/api/pipeline`, {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jobType: 'metal',
-                squareFootage: metalSQs,
-                estimatedDaysToCompletion: 7,
-                revenuePerSq: 1000,
-                addedDate: today,
-                notes: MANUAL_NOTE,
-              }),
-            })
-          );
-        }
+        saves.push(
+          manualMetal
+            ? fetch(`${API_BASE_URL}/api/pipeline/${manualMetal.id}`, {
+                method: 'PUT',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ squareFootage: metalSQs, revenuePerSq: 1000 }),
+              })
+            : fetch(`${API_BASE_URL}/api/pipeline`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  jobType: 'metal',
+                  squareFootage: metalSQs,
+                  estimatedDaysToCompletion: 7,
+                  revenuePerSq: 1000,
+                  addedDate: today,
+                  notes: MANUAL_NOTE,
+                }),
+              })
+        );
       }
 
       if (saves.length === 0) {
@@ -190,7 +197,9 @@ export default function PipelineTracker() {
       const failed = results.find((r) => !r.ok);
       if (failed) {
         const errData = await failed.json().catch(() => ({}));
-        setPipelineError(errData.error || errData.message || `Failed to save pipeline (${failed.status})`);
+        setPipelineError(
+          errData.error || errData.message || `Failed to save pipeline (${failed.status})`
+        );
       } else {
         setShowPipelineForm(false);
         setPipelineData({ shinglesSQS: '', metalSQS: '' });
@@ -203,29 +212,25 @@ export default function PipelineTracker() {
     }
   };
 
-  const handleAddCrew = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // ─── Crew helpers ──────────────────────────────────────────────────────────
 
-    const newCrew: CrewCapacity = {
-      id: Date.now().toString(),
-      crew_type: crewFormData.crew_type,
-      sqs_per_week: parseFloat(crewFormData.sqs_per_week),
-    };
-
-    setCrews([...crews, newCrew]);
-    setShowCrewForm(false);
-    setCrewFormData({
-      crew_type: 'shingle',
-      sqs_per_week: '',
-    });
+  /** Normalize crew_type strings to 'shingle' or 'metal' for grouping. */
+  const normalizeType = (crewType: string): 'shingle' | 'metal' | 'other' => {
+    const t = crewType.toLowerCase();
+    if (t.includes('metal')) return 'metal';
+    if (t.includes('shingle') || t.includes('shingles')) return 'shingle';
+    return 'other';
   };
 
-  const handleDeleteCrew = (id: string) => {
-    if (confirm('Are you sure you want to remove this crew?')) {
-      setCrews(crews.filter(crew => crew.id !== id));
-    }
-  };
+  const totalCapacity = (type: 'shingle' | 'metal'): number =>
+    crews
+      .filter((c) => normalizeType(c.crew_type) === type)
+      .reduce((sum, c) => sum + (c.weekly_sq_capacity ?? 0), 0);
 
+  const shingleCapacity = totalCapacity('shingle');
+  const metalCapacity = totalCapacity('metal');
+
+  // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
@@ -237,16 +242,19 @@ export default function PipelineTracker() {
               setShowPipelineForm(false);
               setPipelineError(null);
             } else {
-              // Pre-populate with existing manual values
               try {
                 const res = await fetch(`${API_BASE_URL}/api/pipeline?activeOnly=true&limit=200`, {
-                  headers: { 'Authorization': `Bearer ${token}` },
+                  headers: { Authorization: `Bearer ${token}` },
                 });
                 if (res.ok) {
                   const data = await res.json();
                   const items: PipelineItem[] = data.data || [];
-                  const shingle = items.find(i => i.job_type === 'shingle' && i.notes === 'Manual pipeline input');
-                  const metal = items.find(i => i.job_type === 'metal' && i.notes === 'Manual pipeline input');
+                  const shingle = items.find(
+                    (i) => i.job_type === 'shingle' && i.notes === MANUAL_NOTE
+                  );
+                  const metal = items.find(
+                    (i) => i.job_type === 'metal' && i.notes === MANUAL_NOTE
+                  );
                   setPipelineData({
                     shinglesSQS: shingle ? String(shingle.square_footage) : '',
                     metalSQS: metal ? String(metal.square_footage) : '',
@@ -264,73 +272,128 @@ export default function PipelineTracker() {
         </button>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {summary && (
-          <>
+      {/* ── HubSpot Ticket Pipeline (live) ─────────────────────────────────── */}
+      {hubspotSQs && (hubspotSQs.shingles > 0 || hubspotSQs.metal > 0) && (
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            HubSpot Ticket Pipeline — Live SQs (All Production Stages)
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-cyan-50 p-4 rounded-lg border border-cyan-200">
+              <p className="text-sm font-medium text-cyan-600">Shingle SQs</p>
+              <p className="text-2xl font-bold text-cyan-900">
+                {hubspotSQs.shingles.toFixed(0)}
+              </p>
+              <p className="text-xs text-cyan-700">from ticket pipeline</p>
+            </div>
+            <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+              <p className="text-sm font-medium text-orange-600">Metal SQs</p>
+              <p className="text-2xl font-bold text-orange-900">
+                {hubspotSQs.metal.toFixed(0)}
+              </p>
+              <p className="text-xs text-orange-700">from ticket pipeline</p>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <p className="text-sm font-medium text-gray-600">Total SQs</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {(hubspotSQs.shingles + hubspotSQs.metal).toFixed(0)}
+              </p>
+              <p className="text-xs text-gray-500">shingle + metal</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Manual pipeline summary ────────────────────────────────────────── */}
+      {summary && (
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Manual Pipeline Entry
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {summary.shingles && (
               <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                 <p className="text-sm font-medium text-blue-600">Shingle Pipeline</p>
-                <p className="text-2xl font-bold text-blue-900">{summary.shingles.totalSQs?.toFixed(0) || 0} SQs</p>
-                <p className="text-xs text-blue-700">{summary.shingles.jobCount || 0} jobs</p>
+                <p className="text-2xl font-bold text-blue-900">
+                  {summary.shingles.totalSQs?.toFixed(0) || 0} SQs
+                </p>
+                <p className="text-xs text-blue-700">{summary.shingles.jobCount || 0} entries</p>
               </div>
             )}
             {summary.metal && (
               <div className="bg-red-50 p-4 rounded-lg border border-red-200">
                 <p className="text-sm font-medium text-red-600">Metal Pipeline</p>
-                <p className="text-2xl font-bold text-red-900">{summary.metal.totalSQs?.toFixed(0) || 0} SQs</p>
-                <p className="text-xs text-red-700">{summary.metal.jobCount || 0} jobs</p>
+                <p className="text-2xl font-bold text-red-900">
+                  {summary.metal.totalSQs?.toFixed(0) || 0} SQs
+                </p>
+                <p className="text-xs text-red-700">{summary.metal.jobCount || 0} entries</p>
               </div>
             )}
             {summary.combined && (
               <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                 <p className="text-sm font-medium text-purple-600">Total Pipeline</p>
-                <p className="text-2xl font-bold text-purple-900">${(summary.combined.totalSQs || 0).toFixed(0)}</p>
-                <p className="text-xs text-purple-700">{summary.combined.jobCount || 0} total jobs</p>
+                <p className="text-2xl font-bold text-purple-900">
+                  {(summary.combined.totalSQs || 0).toFixed(0)} SQs
+                </p>
+                <p className="text-xs text-purple-700">
+                  {summary.combined.jobCount || 0} total entries
+                </p>
               </div>
             )}
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
 
-      {/* Pipeline Input Form */}
+      {/* ── Pipeline input form ────────────────────────────────────────────── */}
       {showPipelineForm && (
         <div className="bg-white p-6 rounded-lg border border-gray-200 shadow">
           <h3 className="text-lg font-semibold mb-2">Update Pipeline Inventory</h3>
-          <p className="text-xs text-gray-500 mb-4">Set the current SQ counts in your pipeline. Saving will update existing manual entries or create new ones.</p>
+          <p className="text-xs text-gray-500 mb-4">
+            Set the current SQ counts. Saving will update existing manual entries or create new
+            ones.
+          </p>
           {pipelineError && (
             <div className="mb-4 bg-red-50 border border-red-200 rounded p-3 flex justify-between items-start">
               <p className="text-sm text-red-700">{pipelineError}</p>
-              <button onClick={() => setPipelineError(null)} className="text-red-500 hover:text-red-700 ml-2 text-xs underline">Dismiss</button>
+              <button
+                onClick={() => setPipelineError(null)}
+                className="text-red-500 hover:text-red-700 ml-2 text-xs underline"
+              >
+                Dismiss
+              </button>
             </div>
           )}
           <form onSubmit={handleSavePipeline} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">SQS of Shingles</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  SQs of Shingles
+                </label>
                 <input
                   type="number"
                   value={pipelineData.shinglesSQS}
-                  onChange={(e) => setPipelineData({ ...pipelineData, shinglesSQS: e.target.value })}
+                  onChange={(e) =>
+                    setPipelineData({ ...pipelineData, shinglesSQS: e.target.value })
+                  }
                   placeholder="e.g., 5000"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
                 />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">SQS of Metal</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  SQs of Metal
+                </label>
                 <input
                   type="number"
                   value={pipelineData.metalSQS}
-                  onChange={(e) => setPipelineData({ ...pipelineData, metalSQS: e.target.value })}
+                  onChange={(e) =>
+                    setPipelineData({ ...pipelineData, metalSQS: e.target.value })
+                  }
                   placeholder="e.g., 3000"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
                 />
               </div>
             </div>
-
             <div className="flex gap-2 justify-end">
               <button
                 type="button"
@@ -348,111 +411,98 @@ export default function PipelineTracker() {
                 disabled={savingPipeline}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
-                {savingPipeline ? 'Saving...' : 'Update Pipeline'}
+                {savingPipeline ? 'Saving…' : 'Update Pipeline'}
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Crews Section */}
+      {/* ── Crew Capacity (read-only, sourced from Crews tab) ─────────────── */}
       <div className="bg-white p-6 rounded-lg border border-gray-200 shadow">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Crews Capacity</h3>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Crew Capacity</h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Manage crew names and weekly SQ capacity in the <strong>Crews</strong> tab.
+            </p>
+          </div>
           <button
-            onClick={() => setShowCrewForm(!showCrewForm)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            onClick={loadCrews}
+            className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 border border-gray-300"
           >
-            {showCrewForm ? 'Cancel' : 'Add Crew'}
+            Refresh
           </button>
         </div>
 
-        {showCrewForm && (
-          <form onSubmit={handleAddCrew} className="space-y-4 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                <select
-                  value={crewFormData.crew_type}
-                  onChange={(e) => setCrewFormData({ ...crewFormData, crew_type: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="shingle">Shingle</option>
-                  <option value="metal">Metal</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">SQS per Week</label>
-                <input
-                  type="number"
-                  value={crewFormData.sqs_per_week}
-                  onChange={(e) => setCrewFormData({ ...crewFormData, sqs_per_week: e.target.value })}
-                  placeholder="e.g., 500"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-2 justify-end">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCrewForm(false);
-                  setCrewFormData({ crew_type: 'shingle', sqs_per_week: '' });
-                }}
-                className="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                Add Crew
-              </button>
-            </div>
-          </form>
-        )}
+        {/* Capacity totals */}
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="bg-blue-50 p-3 rounded border border-blue-200">
+            <p className="text-xs text-blue-600 font-medium">Total Shingle Capacity</p>
+            <p className="text-xl font-bold text-blue-900">
+              {shingleCapacity > 0 ? `${shingleCapacity.toFixed(0)} SQs/wk` : '—'}
+            </p>
+          </div>
+          <div className="bg-red-50 p-3 rounded border border-red-200">
+            <p className="text-xs text-red-600 font-medium">Total Metal Capacity</p>
+            <p className="text-xl font-bold text-red-900">
+              {metalCapacity > 0 ? `${metalCapacity.toFixed(0)} SQs/wk` : '—'}
+            </p>
+          </div>
+        </div>
 
         {crews.length === 0 ? (
-          <p className="text-center py-6 text-gray-500">No crews added yet</p>
+          <p className="text-center py-6 text-gray-500">No active crews found</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-100 border-b border-gray-200">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">SQS per Week</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Actions</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                    Crew Name
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                    Type
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                    SQs / Week
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {crews.map((crew) => (
-                  <tr key={crew.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm text-gray-900 font-medium">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${crew.crew_type === 'shingle' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}`}>
-                        {crew.crew_type}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{crew.sqs_per_week}</td>
-                    <td className="px-6 py-4 text-sm space-x-2">
-                      <button
-                        onClick={() => handleDeleteCrew(crew.id)}
-                        className="text-red-600 hover:text-red-800 font-medium"
-                      >
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {crews.map((crew) => {
+                  const type = normalizeType(crew.crew_type);
+                  return (
+                    <tr key={crew.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 text-sm text-gray-900 font-medium">
+                        {crew.crew_name || '—'}
+                      </td>
+                      <td className="px-6 py-4 text-sm">
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                            type === 'shingle'
+                              ? 'bg-blue-100 text-blue-800'
+                              : type === 'metal'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}
+                        >
+                          {crew.crew_type}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900">
+                        {crew.weekly_sq_capacity != null
+                          ? `${parseFloat(String(crew.weekly_sq_capacity)).toFixed(0)} SQs`
+                          : <span className="text-gray-400 italic">not set</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
-
     </div>
   );
 }
