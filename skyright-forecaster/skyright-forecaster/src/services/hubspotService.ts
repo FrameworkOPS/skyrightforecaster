@@ -96,42 +96,73 @@ export class HubSpotService {
   }
 
   /**
-   * Fetch tickets in the T/O to Production pipeline stage (internal name: 61001855)
-   * and return their roof_squares and job_type properties
+   * Fetch tickets across all active production pipeline stages and return
+   * their roof_squares and job_type properties. Paginates automatically
+   * since HubSpot caps search results at 200 per page.
+   *
+   * Stages included:
+   *   Chance's Projects   = 1123049066
+   *   Long Term Schedule  = 131602948
+   *   Material Ordered    = 109644549
+   *   Soft Scheduled      = 979031852
+   *   Scheduled           = 61001856
+   *   T/O to Production   = 61001855
    */
-  async fetchProductionTickets(limit: number = 100): Promise<HubSpotTicket[]> {
-    try {
-      const response = await this.apiClient.post('/crm/v3/objects/tickets/search', {
-        limit,
-        filterGroups: [
-          {
-            filters: [
-              {
-                propertyName: 'hs_pipeline_stage',
-                operator: 'EQ',
-                value: '61001855',
-              },
-            ],
-          },
-        ],
-        properties: [
-          'subject',
-          'hs_pipeline_stage',
-          'roof_squares',
-          'job_type',
-        ],
-      });
+  async fetchProductionTickets(): Promise<HubSpotTicket[]> {
+    const PRODUCTION_STAGE_IDS = [
+      '1123049066', // Chance's Projects
+      '131602948',  // Long Term Schedule
+      '109644549',  // Material Ordered
+      '979031852',  // Soft Scheduled
+      '61001856',   // Scheduled
+      '61001855',   // T/O to Production
+    ];
 
-      return response.data.results || [];
+    const allTickets: HubSpotTicket[] = [];
+    let after: string | undefined;
+
+    try {
+      do {
+        const body: Record<string, any> = {
+          limit: 200,
+          filterGroups: [
+            {
+              filters: [
+                {
+                  propertyName: 'hs_pipeline_stage',
+                  operator: 'IN',
+                  values: PRODUCTION_STAGE_IDS,
+                },
+              ],
+            },
+          ],
+          properties: [
+            'subject',
+            'hs_pipeline_stage',
+            'roof_squares',
+            'job_type',
+          ],
+        };
+
+        if (after) body.after = after;
+
+        const response = await this.apiClient.post('/crm/v3/objects/tickets/search', body);
+        const results: HubSpotTicket[] = response.data.results || [];
+        allTickets.push(...results);
+
+        after = response.data.paging?.next?.after;
+      } while (after);
+
+      return allTickets;
     } catch (error) {
-      console.error('Error fetching T/O to Production tickets from HubSpot:', error);
+      console.error('Error fetching production tickets from HubSpot:', error);
       throw new Error('Failed to fetch production tickets from HubSpot');
     }
   }
 
   /**
    * Aggregate roof_squares from tickets by job type.
-   * "Metal Roofing" → metal total, "Shingles Roof" → shingles total
+   * "Metal Roof" → metal total, "Shingles Roof" → shingles total
    */
   aggregateRoofingSquares(tickets: HubSpotTicket[]): RoofingSquaresSummary {
     let metal = 0;
@@ -141,7 +172,7 @@ export class HubSpotService {
       const sqs = parseFloat(ticket.properties.roof_squares || '0') || 0;
       const jobType = ticket.properties.job_type || '';
 
-      if (jobType === 'Metal Roofing') {
+      if (jobType === 'Metal Roof') {
         metal += sqs;
       } else if (jobType === 'Shingles Roof') {
         shingles += sqs;
@@ -161,9 +192,9 @@ export class HubSpotService {
     const estimatedDuration = this.extractDurationFromNotes(props.notes) || 5;
 
     // Map HubSpot job_type values to DB crew_type
-    // "Metal Roofing" → 'Metal Roofing', "Shingles Roof" → 'Shingles Roof'
+    // "Metal Roof" → 'Metal Roof', "Shingles Roof" → 'Shingles Roof'
     const crewType: string | undefined =
-      props.job_type === 'Metal Roofing' || props.job_type === 'Shingles Roof'
+      props.job_type === 'Metal Roof' || props.job_type === 'Shingles Roof'
         ? props.job_type
         : undefined;
 

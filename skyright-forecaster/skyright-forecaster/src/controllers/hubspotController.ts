@@ -143,16 +143,16 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
       try {
         const hubspotService = new HubSpotService(hubspotAccessToken);
 
-        // Fetch Contract Signed deals and T/O to Production tickets in parallel
+        // Fetch Contract Signed deals and all production-stage tickets in parallel
         const [hubspotDeals, productionTickets] = await Promise.all([
           hubspotService.fetchPendingJobs(50),
-          hubspotService.fetchProductionTickets(100),
+          hubspotService.fetchProductionTickets(),
         ]);
 
         const deals = hubspotDeals.map((deal: any) => {
           const amount = deal.properties?.amount ? parseFloat(deal.properties.amount) : 0;
           const rawJobType: string = deal.properties?.job_type || '';
-          const jobType = rawJobType === 'Metal Roofing' ? 'metal' : 'shingles';
+          const jobType = rawJobType === 'Metal Roof' ? 'metal' : 'shingles';
 
           return {
             hubspot_id: deal.id,
@@ -167,7 +167,7 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
         const totalWeightedValue = deals.reduce((sum: number, d: any) => sum + d.weighted_value, 0);
         const totalWeightedSqs = deals.reduce((sum: number, d: any) => sum + d.estimated_sqs, 0);
 
-        // Aggregate actual roof squares from T/O to Production tickets by type
+        // Aggregate actual roof squares across all production stages by type
         const roofingSquares: RoofingSquaresSummary = hubspotService.aggregateRoofingSquares(productionTickets);
 
         return res.json({
