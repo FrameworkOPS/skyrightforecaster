@@ -222,10 +222,17 @@ export default function PipelineTracker() {
     return 'other';
   };
 
+  /** Effective weekly capacity for a single crew — falls back to type-based default
+   *  (200 shingle / 100 metal) when weekly_sq_capacity hasn't been explicitly saved. */
+  const effectiveCapacity = (crew: Crew): number => {
+    if (crew.weekly_sq_capacity != null) return crew.weekly_sq_capacity;
+    return normalizeType(crew.crew_type) === 'metal' ? 100 : 200;
+  };
+
   const totalCapacity = (type: 'shingle' | 'metal'): number =>
     crews
       .filter((c) => normalizeType(c.crew_type) === type)
-      .reduce((sum, c) => sum + (c.weekly_sq_capacity ?? 0), 0);
+      .reduce((sum, c) => sum + effectiveCapacity(c), 0);
 
   const shingleCapacity = totalCapacity('shingle');
   const metalCapacity = totalCapacity('metal');
@@ -491,9 +498,10 @@ export default function PipelineTracker() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900">
-                        {crew.weekly_sq_capacity != null
-                          ? `${parseFloat(String(crew.weekly_sq_capacity)).toFixed(0)} SQs`
-                          : <span className="text-gray-400 italic">not set</span>}
+                        {effectiveCapacity(crew).toFixed(0)} SQs
+                        {crew.weekly_sq_capacity == null && (
+                          <span className="ml-1 text-xs text-gray-400 italic">(default)</span>
+                        )}
                       </td>
                     </tr>
                   );
