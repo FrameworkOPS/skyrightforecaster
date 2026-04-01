@@ -129,107 +129,114 @@ export const getHubSpotStatus = asyncHandler(async (req: Request, res: Response)
   });
 });
 
+/**
+ * GET /api/hubspot/debug
+ * Diagnostic endpoint — tests the token and both search APIs, returns raw
+ * HubSpot response or the exact error so it's easy to see what's failing.
+ */
+export const debugHubSpot = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError('User not authenticated', 401);
+
+  const token = process.env.HUBSPOT_ACCESS_TOKEN;
+  if (!token) {
+    return res.json({ ok: false, error: 'HUBSPOT_ACCESS_TOKEN not set in environment' });
+  }
+
+  const hubspotService = new HubSpotService(token);
+  const results: Record<string, any> = { token_present: true };
+
+  // Test deals search
+  try {
+    const deals = await hubspotService.fetchPendingJobs(5);
+    results.deals = { ok: true, count: deals.length, sample: deals[0]?.properties ?? null };
+  } catch (e: any) {
+    results.deals = {
+      ok: false,
+      status: e?.response?.status,
+      error: e?.response?.data?.message || e?.response?.data?.error || e?.message,
+      body: e?.response?.data,
+    };
+  }
+
+  // Test tickets search
+  try {
+    const tickets = await hubspotService.fetchProductionTickets();
+    results.tickets = { ok: true, count: tickets.length, sample: tickets[0]?.properties ?? null };
+  } catch (e: any) {
+    results.tickets = {
+      ok: false,
+      status: e?.response?.status,
+      error: e?.response?.data?.message || e?.response?.data?.error || e?.message,
+      body: e?.response?.data,
+    };
+  }
+
+  return res.json(results);
+});
+
 export const getPipelineSummary = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
     throw new AppError('User not authenticated', 401);
   }
 
+  const hubspotAccessToken = process.env.HUBSPOT_ACCESS_TOKEN;
+
+  // A Private App Token (PAT) is all that is needed — HUBSPOT_CLIENT_ID is only
+  // required for the OAuth flow and must NOT gate the live data path.
+  if (!hubspotAccessToken) {
+    throw new AppError('HUBSPOT_ACCESS_TOKEN is not configured on the server', 500);
+  }
+
   try {
-    const clientId = process.env.HUBSPOT_CLIENT_ID;
-    const hubspotAccessToken = process.env.HUBSPOT_ACCESS_TOKEN;
+    const hubspotService = new HubSpotService(hubspotAccessToken);
 
-    // If HubSpot is configured, try to fetch real deals
-    if (clientId && hubspotAccessToken) {
-      try {
-        const hubspotService = new HubSpotService(hubspotAccessToken);
+    // Fetch Contract Signed deals and all production-stage tickets in parallel
+    const [hubspotDeals, productionTickets] = await Promise.all([
+      hubspotService.fetchPendingJobs(50),
+      hubspotService.fetchProductionTickets(),
+    ]);
 
-        // Fetch Contract Signed deals and all production-stage tickets in parallel
-        const [hubspotDeals, productionTickets] = await Promise.all([
-          hubspotService.fetchPendingJobs(50),
-          hubspotService.fetchProductionTickets(),
-        ]);
+    const deals = hubspotDeals.map((deal: any) => {
+      const amount = deal.properties?.amount ? parseFloat(deal.properties.amount) : 0;
+      const rawJobType: string = deal.properties?.job_type || '';
+      const jobType = rawJobType === 'Metal Roof' ? 'metal' : 'shingle';
 
-        const deals = hubspotDeals.map((deal: any) => {
-          const amount = deal.properties?.amount ? parseFloat(deal.properties.amount) : 0;
-          const rawJobType: string = deal.properties?.job_type || '';
-          const jobType = rawJobType === 'Metal Roof' ? 'metal' : 'shingle';
+      return {
+        hubspot_id: deal.id,
+        dealname: deal.properties?.dealname || 'Unnamed Deal',
+        amount,
+        job_type: jobType,
+        weighted_value: amount * CLOSING_RATE * (jobType === 'metal' ? CREW_TYPE_RATIOS.metal : CREW_TYPE_RATIOS.shingles),
+        estimated_sqs: (amount * CLOSING_RATE * (jobType === 'metal' ? CREW_TYPE_RATIOS.metal : CREW_TYPE_RATIOS.shingles)) / (jobType === 'metal' ? REVENUE_PER_SQ.metal : REVENUE_PER_SQ.shingles),
+      };
+    });
 
-          return {
-            hubspot_id: deal.id,
-            dealname: deal.properties?.dealname || 'Unnamed Deal',
-            amount,
-            job_type: jobType,
-            weighted_value: amount * CLOSING_RATE * (jobType === 'metal' ? CREW_TYPE_RATIOS.metal : CREW_TYPE_RATIOS.shingles),
-            estimated_sqs: (amount * CLOSING_RATE * (jobType === 'metal' ? CREW_TYPE_RATIOS.metal : CREW_TYPE_RATIOS.shingles)) / (jobType === 'metal' ? REVENUE_PER_SQ.metal : REVENUE_PER_SQ.shingles),
-          };
-        });
+    const totalWeightedValue = deals.reduce((sum: number, d: any) => sum + d.weighted_value, 0);
+    const totalWeightedSqs = deals.reduce((sum: number, d: any) => sum + d.estimated_sqs, 0);
 
-        const totalWeightedValue = deals.reduce((sum: number, d: any) => sum + d.weighted_value, 0);
-        const totalWeightedSqs = deals.reduce((sum: number, d: any) => sum + d.estimated_sqs, 0);
+    const roofingSquares: RoofingSquaresSummary = hubspotService.aggregateRoofingSquares(productionTickets);
 
-        // Aggregate actual roof squares across all production stages by type
-        const roofingSquares: RoofingSquaresSummary = hubspotService.aggregateRoofingSquares(productionTickets);
-
-        return res.json({
-          success: true,
-          data: {
-            deals,
-            totalWeightedValue,
-            totalWeightedSqs,
-            roofingSquares,
-            message: 'HubSpot pipeline summary (live data)',
-            source: 'HubSpot API',
-          },
-        });
-      } catch (hubspotError) {
-        console.error('Failed to fetch from HubSpot API, falling back to mock data:', hubspotError);
-        // Fall through to mock data below
-      }
-    }
-
-    // Return mock HubSpot deals if HubSpot service is not configured or API call failed
-    const mockDeals = [
-      {
-        hubspot_id: 'deal-1',
-        dealname: 'Commercial Roofing Project - Downtown',
-        amount: 45000,
-        job_type: 'shingles',
-        weighted_value: 45000 * CLOSING_RATE * CREW_TYPE_RATIOS.shingles,
-        estimated_sqs: (45000 * CLOSING_RATE * CREW_TYPE_RATIOS.shingles) / REVENUE_PER_SQ.shingles,
-      },
-      {
-        hubspot_id: 'deal-2',
-        dealname: 'Metal Roofing - Industrial Complex',
-        amount: 75000,
-        job_type: 'metal',
-        weighted_value: 75000 * CLOSING_RATE * CREW_TYPE_RATIOS.metal,
-        estimated_sqs: (75000 * CLOSING_RATE * CREW_TYPE_RATIOS.metal) / REVENUE_PER_SQ.metal,
-      },
-      {
-        hubspot_id: 'deal-3',
-        dealname: 'Residential Roof Replacement',
-        amount: 28000,
-        job_type: 'shingles',
-        weighted_value: 28000 * CLOSING_RATE * CREW_TYPE_RATIOS.shingles,
-        estimated_sqs: (28000 * CLOSING_RATE * CREW_TYPE_RATIOS.shingles) / REVENUE_PER_SQ.shingles,
-      },
-    ];
-
-    const totalWeightedValue = mockDeals.reduce((sum, d) => sum + d.weighted_value, 0);
-    const totalWeightedSqs = mockDeals.reduce((sum, d) => sum + d.estimated_sqs, 0);
-
-    res.json({
+    return res.json({
       success: true,
       data: {
-        deals: mockDeals,
+        deals,
         totalWeightedValue,
         totalWeightedSqs,
-        roofingSquares: { metal: 0, shingles: 0 },
-        message: 'HubSpot pipeline summary (mock data - configure real credentials to use live data)',
-        source: 'Mock Data',
+        roofingSquares,
+        message: 'HubSpot pipeline summary (live data)',
+        source: 'HubSpot API',
       },
     });
-  } catch (error) {
-    throw new AppError('Failed to fetch HubSpot pipeline', 500);
+  } catch (error: any) {
+    // Surface the real HubSpot error — status, message, and response body — so
+    // it's visible in Railway logs and returned to the client for debugging.
+    const status   = error?.response?.status;
+    const hsMsg    = error?.response?.data?.message || error?.response?.data?.error;
+    const detail   = hsMsg
+      ? `HubSpot ${status}: ${hsMsg}`
+      : error?.message || 'Unknown error calling HubSpot API';
+
+    console.error('[HubSpot] getPipelineSummary failed:', detail, error?.response?.data);
+    throw new AppError(`HubSpot API error — ${detail}`, 502);
   }
 });
