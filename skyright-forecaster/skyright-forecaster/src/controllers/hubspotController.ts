@@ -94,8 +94,14 @@ export const syncJobs = asyncHandler(async (req: Request, res: Response) => {
       message: 'Jobs synchronized successfully',
       data: syncResult,
     });
-  } catch (error) {
-    throw new AppError('Failed to sync jobs from HubSpot', 500);
+  } catch (error: any) {
+    const status = error?.response?.status;
+    const hsMsg  = error?.response?.data?.message || error?.response?.data?.error;
+    const detail = hsMsg
+      ? `HubSpot ${status}: ${hsMsg}`
+      : error?.message || 'Unknown error';
+    console.error('[HubSpot] syncJobs failed:', detail, error?.response?.data);
+    throw new AppError(`HubSpot sync failed — ${detail}`, 502);
   }
 });
 

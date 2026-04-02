@@ -100,8 +100,10 @@ export class HubSpotService {
           'hs_v2_date_entered_60609659',
         ],
         sorts: [
+          // Sort newest-first by deal create date (hs_v2_date_entered_* properties
+          // are not sortable in HubSpot search — use createdate instead)
           {
-            propertyName: 'hs_v2_date_entered_60609659',
+            propertyName: 'createdate',
             direction: 'DESCENDING',
           },
         ],
@@ -218,7 +220,10 @@ export class HubSpotService {
         : undefined;
 
     // roof_squares from HubSpot → square_footage in DB
-    const squareFootage = props.roof_squares ? parseFloat(props.roof_squares) : undefined;
+    // Default to 30 SQs when field is blank (matches pipeline summary behaviour)
+    const squareFootage = props.roof_squares
+      ? parseFloat(props.roof_squares)
+      : 30;
 
     return {
       jobId: hubspotJob.id,
