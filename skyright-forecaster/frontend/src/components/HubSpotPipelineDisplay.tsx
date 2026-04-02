@@ -178,15 +178,9 @@ export default function HubSpotPipelineDisplay() {
           ? {
               ...d,
               job_type: newType,
-              weighted_value:
-                d.amount *
-                CLOSING_RATE *
-                (newType === 'metal' ? CREW_TYPE_RATIOS.metal : CREW_TYPE_RATIOS.shingles),
-              estimated_sqs:
-                (d.amount *
-                  CLOSING_RATE *
-                  (newType === 'metal' ? CREW_TYPE_RATIOS.metal : CREW_TYPE_RATIOS.shingles)) /
-                (newType === 'metal' ? REVENUE_PER_SQ.metal : REVENUE_PER_SQ.shingles),
+              gross_value: d.roof_sqs * (newType === 'metal' ? REVENUE_PER_SQ.metal : REVENUE_PER_SQ.shingles),
+              weighted_value: d.roof_sqs * (newType === 'metal' ? REVENUE_PER_SQ.metal : REVENUE_PER_SQ.shingles) * CLOSING_RATE,
+              estimated_sqs: d.roof_sqs * CLOSING_RATE,
             }
           : d
       )
@@ -245,12 +239,12 @@ export default function HubSpotPipelineDisplay() {
         <div className="bg-green-50 p-4 rounded border border-green-200">
           <p className="text-sm text-green-600 font-medium">Weighted Value</p>
           <p className="text-2xl font-bold text-green-900">
-            ${(totalWeightedValue / 1000).toFixed(1)}K
+            ${((totalWeightedValue ?? 0) / 1000).toFixed(1)}K
           </p>
         </div>
         <div className="bg-purple-50 p-4 rounded border border-purple-200">
           <p className="text-sm text-purple-600 font-medium">Projected SQs</p>
-          <p className="text-2xl font-bold text-purple-900">{totalWeightedSqs.toFixed(0)}</p>
+          <p className="text-2xl font-bold text-purple-900">{(totalWeightedSqs ?? 0).toFixed(0)}</p>
         </div>
       </div>
 
@@ -351,13 +345,13 @@ export default function HubSpotPipelineDisplay() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-right text-gray-900">
-                    ${deal.gross_value.toLocaleString()}
+                    ${(deal.gross_value ?? 0).toLocaleString()}
                   </td>
                   <td className="px-4 py-3 text-right text-gray-900 font-medium">
-                    ${deal.weighted_value.toLocaleString()}
+                    ${(deal.weighted_value ?? 0).toLocaleString()}
                   </td>
                   <td className="px-4 py-3 text-right text-gray-900">
-                    {deal.estimated_sqs.toFixed(1)}
+                    {(deal.estimated_sqs ?? 0).toFixed(1)}
                   </td>
                 </tr>
               ))}
