@@ -95,7 +95,6 @@ export class HubSpotService {
           'roof_squares',
           'closedate',
         ],
-        sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
       });
 
       return response.data.results || [];
