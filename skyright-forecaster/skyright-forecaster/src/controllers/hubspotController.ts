@@ -217,10 +217,6 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
 
         if (jobType === null) return null; // ignore unrecognised types
 
-        const amount = deal.properties?.amount ? parseFloat(deal.properties.amount) : 0;
-        const dateEnteredContractSent: string | null =
-          deal.properties?.hs_date_entered_60609659 ?? null;
-
         // Use actual roof_squares from HubSpot when sales has entered it;
         // fall back to 30 SQs per roof until that field is populated.
         const DEFAULT_SQS = 30;
@@ -228,16 +224,21 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
           ? parseFloat(deal.properties.roof_squares)
           : DEFAULT_SQS;
 
+        // Revenue is derived from SQs × per-SQ price — deal amount is ignored.
+        const revenuePerSq = jobType === 'metal' ? REVENUE_PER_SQ.metal : REVENUE_PER_SQ.shingles;
+        const grossValue   = roofSqs * revenuePerSq;
+        const weightedValue = grossValue * CLOSING_RATE;
+        const estimatedSqs  = roofSqs * CLOSING_RATE;
+
         return {
           hubspot_id: deal.id,
           dealname: deal.properties?.dealname || 'Unnamed Deal',
-          amount,
           job_type: jobType,
-          date_entered_contract_sent: dateEnteredContractSent,
           roof_sqs: roofSqs,
           using_default_sqs: !deal.properties?.roof_squares,
-          weighted_value: amount * CLOSING_RATE,
-          estimated_sqs: roofSqs * CLOSING_RATE,
+          gross_value: grossValue,
+          weighted_value: weightedValue,
+          estimated_sqs: estimatedSqs,
         };
       })
       .filter((d: any) => d !== null);

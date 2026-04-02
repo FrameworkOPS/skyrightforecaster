@@ -90,10 +90,8 @@ export class HubSpotService {
         ],
         properties: [
           'dealname',
-          'amount',
           'job_type',
           'roof_squares',
-          'closedate',
         ],
       });
 

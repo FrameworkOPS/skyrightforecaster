@@ -6,13 +6,12 @@ import { CLOSING_RATE, CREW_TYPE_RATIOS, REVENUE_PER_SQ } from '../constants/bus
 interface HubSpotDeal {
   hubspot_id: string;
   dealname: string;
-  amount: number;
   job_type: 'shingle' | 'metal';
-  weighted_value: number;
-  estimated_sqs: number;
   roof_sqs: number;
   using_default_sqs: boolean;
-  date_entered_contract_sent: string | null;
+  gross_value: number;
+  weighted_value: number;
+  estimated_sqs: number;
 }
 
 interface RoofingSquares {
@@ -310,11 +309,10 @@ export default function HubSpotPipelineDisplay() {
             <thead className="bg-gray-100 border-b border-gray-200">
               <tr>
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Deal Name</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Entered Contract Sent</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-700">Amount</th>
                 <th className="px-4 py-3 text-center font-medium text-gray-700">Job Type</th>
                 <th className="px-4 py-3 text-right font-medium text-gray-700">Roof SQs</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-700">Weighted Value</th>
+                <th className="px-4 py-3 text-right font-medium text-gray-700">Gross Value</th>
+                <th className="px-4 py-3 text-right font-medium text-gray-700">Weighted Value (×40%)</th>
                 <th className="px-4 py-3 text-right font-medium text-gray-700">Est. SQs (×40%)</th>
               </tr>
             </thead>
@@ -322,16 +320,6 @@ export default function HubSpotPipelineDisplay() {
               {filteredDeals.map((deal) => (
                 <tr key={deal.hubspot_id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-900 font-medium">{deal.dealname}</td>
-                  <td className="px-4 py-3 text-gray-500 text-sm">
-                    {deal.date_entered_contract_sent
-                      ? new Date(deal.date_entered_contract_sent).toLocaleDateString('en-US', {
-                          month: 'short', day: 'numeric', year: '2-digit',
-                        })
-                      : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-right text-gray-900">
-                    ${deal.amount.toLocaleString()}
-                  </td>
                   <td className="px-4 py-3 text-center">
                     <span
                       className={`px-2 py-1 rounded text-xs font-semibold ${
@@ -362,6 +350,9 @@ export default function HubSpotPipelineDisplay() {
                       <span className="ml-1 text-xs text-gray-400 italic" title="Sales hasn't entered roof squares yet — using 30 SQ default">est.</span>
                     )}
                   </td>
+                  <td className="px-4 py-3 text-right text-gray-900">
+                    ${deal.gross_value.toLocaleString()}
+                  </td>
                   <td className="px-4 py-3 text-right text-gray-900 font-medium">
                     ${deal.weighted_value.toLocaleString()}
                   </td>
@@ -376,8 +367,10 @@ export default function HubSpotPipelineDisplay() {
       )}
 
       <div className="mt-4 pt-4 border-t border-gray-200 text-xs text-gray-500">
-        Roof SQs: actual value from HubSpot, or <strong>30 SQ default</strong> until sales enters it (<em>est.</em> label). Est. SQs = Roof SQs × {(CLOSING_RATE * 100).toFixed(0)}% closing rate.{' '}
-        Weighted Value = Deal Amount × {(CLOSING_RATE * 100).toFixed(0)}%.{' '}
+        Roof SQs: actual value from HubSpot, or <strong>30 SQ default</strong> until sales enters it (<em>est.</em> label).{' '}
+        Gross Value = Roof SQs × per-SQ price (Shingle ${REVENUE_PER_SQ.shingles}/SQ · Metal ${REVENUE_PER_SQ.metal}/SQ).{' '}
+        Weighted Value = Gross Value × {(CLOSING_RATE * 100).toFixed(0)}% closing rate.{' '}
+        Est. SQs = Roof SQs × {(CLOSING_RATE * 100).toFixed(0)}%.{' '}
         <strong>Push to Sales Forecast</strong> distributes estimated SQs evenly across all 26 weeks.
       </div>
     </div>
