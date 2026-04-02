@@ -74,12 +74,16 @@ export class HubSpotService {
 
     try {
       do {
+        // 90-day rolling window — ms timestamp for HubSpot datetime filter
+        const ninetyDaysAgo = String(Date.now() - 90 * 24 * 60 * 60 * 1000);
+
         const body: Record<string, any> = {
           limit: 200,
           filterGroups: [
             {
               filters: [
                 { propertyName: 'dealstage', operator: 'EQ', value: '60609659' },
+                { propertyName: 'hs_v2_date_entered_current_stage', operator: 'GTE', value: ninetyDaysAgo },
               ],
             },
           ],
