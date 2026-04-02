@@ -153,7 +153,7 @@ export const debugHubSpot = asyncHandler(async (req: Request, res: Response) => 
 
   // Test deals search
   try {
-    const deals = await hubspotService.fetchPendingJobs(5);
+    const deals = await hubspotService.fetchPendingJobs();
     results.deals = { ok: true, count: deals.length, sample: deals[0]?.properties ?? null };
   } catch (e: any) {
     results.deals = {
@@ -198,7 +198,7 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
 
     // Fetch Contract Sent deals and all production-stage tickets in parallel
     const [hubspotDeals, productionTickets] = await Promise.all([
-      hubspotService.fetchPendingJobs(50),
+      hubspotService.fetchPendingJobs(),
       hubspotService.fetchProductionTickets(),
     ]);
 

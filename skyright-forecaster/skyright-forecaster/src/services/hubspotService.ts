@@ -68,27 +68,34 @@ export class HubSpotService {
    * Results sorted newest-first by hs_v2_date_entered_60609659
    * (the timestamp the deal entered Contract Sent).
    */
-  async fetchPendingJobs(limit: number = 100): Promise<HubSpotJob[]> {
-    try {
-      const response = await this.apiClient.post('/crm/v3/objects/deals/search', {
-        limit,
-        filterGroups: [
-          {
-            // All deals in Contract Sent stage — job_type filter applied in
-            // the controller after fetch so we avoid HubSpot enum key issues
-            filters: [
-              { propertyName: 'dealstage', operator: 'EQ', value: '60609659' },
-            ],
-          },
-        ],
-        properties: [
-          'dealname',
-          'type',
-          'roof_squares',
-        ],
-      });
+  async fetchPendingJobs(): Promise<HubSpotJob[]> {
+    const allDeals: HubSpotJob[] = [];
+    let after: string | undefined;
 
-      return response.data.results || [];
+    try {
+      do {
+        const body: Record<string, any> = {
+          limit: 200,
+          filterGroups: [
+            {
+              filters: [
+                { propertyName: 'dealstage', operator: 'EQ', value: '60609659' },
+              ],
+            },
+          ],
+          properties: ['dealname', 'type', 'roof_squares'],
+        };
+
+        if (after) body.after = after;
+
+        const response = await this.apiClient.post('/crm/v3/objects/deals/search', body);
+        const results: HubSpotJob[] = response.data.results || [];
+        allDeals.push(...results);
+
+        after = response.data.paging?.next?.after;
+      } while (after);
+
+      return allDeals;
     } catch (error) {
       console.error('Error fetching Contract Sent deals from HubSpot:', error);
       throw new Error('Failed to fetch deals from HubSpot');
