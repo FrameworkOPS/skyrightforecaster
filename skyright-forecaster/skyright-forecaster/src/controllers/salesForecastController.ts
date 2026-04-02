@@ -3,7 +3,7 @@ import { query } from '../config/database';
 import { AppError, asyncHandler } from '../middleware/errorHandler';
 
 export const getSalesForecasts = asyncHandler(async (req: Request, res: Response) => {
-  const { startWeek, endWeek, jobType, page = 1, limit = 50 } = req.query;
+  const { startWeek, endWeek, jobType, page = 1, limit = 200 } = req.query;
 
   let whereConditions = [];
   const params: any[] = [];

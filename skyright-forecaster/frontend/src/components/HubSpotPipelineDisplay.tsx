@@ -55,6 +55,7 @@ export default function HubSpotPipelineDisplay() {
   const [roofingSquares, setRoofingSquares] = useState<RoofingSquares | null>(null);
   const [loading, setLoading] = useState(false);
   const [pushing, setPushing] = useState(false);
+  const [pushingTickets, setPushingTickets] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<'all' | 'shingle' | 'metal'>('all');
 
@@ -171,6 +172,83 @@ export default function HubSpotPipelineDisplay() {
     }
   };
 
+  /**
+   * Push ticket pipeline SQs to the sales forecast.
+   * Ticket SQs represent jobs already in production — push the total
+   * into the current week only (they're imminent, not spread over 6 months).
+   */
+  const handlePushTicketsToForecast = async () => {
+    if (!roofingSquares) return;
+    const { shingles, metal } = roofingSquares;
+
+    if (shingles === 0 && metal === 0) {
+      alert('No ticket SQs to push — no production tickets found.');
+      return;
+    }
+
+    const weeks = getForecastWeeks();
+    const numWeeks = weeks.length;
+    const weeklyShingle = Math.round(shingles / numWeeks);
+    const weeklyMetal   = Math.round(metal   / numWeeks);
+
+    const confirmed = window.confirm(
+      `Push ticket pipeline SQs to Sales Forecast?\n\n` +
+        `Shingle: ${shingles.toFixed(0)} total SQs → ${weeklyShingle} SQs/week\n` +
+        `Metal:   ${metal.toFixed(0)} total SQs → ${weeklyMetal} SQs/week\n\n` +
+        `Distributed evenly across ${numWeeks} weeks. This will overwrite existing values.`
+    );
+    if (!confirmed) return;
+
+    setPushingTickets(true);
+    try {
+      const posts: Promise<Response>[] = [];
+
+      if (weeklyShingle > 0) {
+        weeks.forEach((w) =>
+          posts.push(
+            fetch(`${API_BASE_URL}/api/sales-forecast`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                forecastWeek: w,
+                jobType: 'shingle',
+                projectedSquareFootage: weeklyShingle,
+                projectedJobCount: 0,
+                notes: 'HubSpot ticket pipeline',
+              }),
+            })
+          )
+        );
+      }
+
+      if (weeklyMetal > 0) {
+        weeks.forEach((w) =>
+          posts.push(
+            fetch(`${API_BASE_URL}/api/sales-forecast`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                forecastWeek: w,
+                jobType: 'metal',
+                projectedSquareFootage: weeklyMetal,
+                projectedJobCount: 0,
+                notes: 'HubSpot ticket pipeline',
+              }),
+            })
+          )
+        );
+      }
+
+      await Promise.all(posts);
+      alert('Sales forecast updated with ticket pipeline SQs! Refresh the Sales Forecast table to see the changes.');
+    } catch (err) {
+      console.error('Error pushing ticket SQs to sales forecast:', err);
+      alert('Failed to push ticket SQs. Check console for details.');
+    } finally {
+      setPushingTickets(false);
+    }
+  };
+
   const handleAssignType = (hubspotId: string, newType: 'shingle' | 'metal') => {
     setDeals(
       deals.map((d) =>
@@ -251,9 +329,18 @@ export default function HubSpotPipelineDisplay() {
       {/* Ticket pipeline SQs (live from all production stages) */}
       {roofingSquares && (roofingSquares.metal > 0 || roofingSquares.shingles > 0) && (
         <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-            Ticket Pipeline — Live SQs Across All Production Stages
-          </p>
+          <div className="flex justify-between items-center mb-2">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Ticket Pipeline — Live SQs Across All Production Stages
+            </p>
+            <button
+              onClick={handlePushTicketsToForecast}
+              disabled={pushingTickets || loading}
+              className="px-3 py-1 bg-teal-600 text-white text-xs rounded hover:bg-teal-700 disabled:opacity-50 font-medium"
+            >
+              {pushingTickets ? 'Pushing…' : '↓ Push to Sales Forecast'}
+            </button>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-cyan-50 p-3 rounded border border-cyan-200">
               <p className="text-xs text-cyan-600 font-medium">Shingle SQs</p>
