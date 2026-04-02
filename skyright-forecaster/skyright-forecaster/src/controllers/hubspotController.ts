@@ -205,12 +205,12 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
     // Map deals — only include "Shingles Roof" and "Metal Roof" job types.
     // All other types are excluded here as a belt-and-suspenders guard
     // (the HubSpot search filter already restricts to these two values).
-    // Log raw job_type values so we can confirm the HubSpot internal enum keys
-    console.log('[HubSpot] raw job_types from Contract Sent:', hubspotDeals.map((d: any) => d.properties?.job_type));
+    // Log raw type values so we can confirm the HubSpot internal enum keys
+    console.log('[HubSpot] raw types from Contract Sent:', hubspotDeals.map((d: any) => d.properties?.type));
 
     const deals = hubspotDeals
       .map((deal: any) => {
-        const rawJobType: string = deal.properties?.job_type || '';
+        const rawJobType: string = deal.properties?.type || '';
 
         // Exact HubSpot property values → internal type key
         const jobType: 'metal' | 'shingle' | null =
@@ -228,8 +228,8 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
           : DEFAULT_SQS;
 
         // Revenue is derived from SQs × per-SQ price — deal amount is ignored.
-        const revenuePerSq = jobType === 'metal' ? REVENUE_PER_SQ.metal : REVENUE_PER_SQ.shingles;
-        const grossValue   = roofSqs * revenuePerSq;
+        const revenuePerSq  = jobType === 'metal' ? REVENUE_PER_SQ.metal : REVENUE_PER_SQ.shingles;
+        const grossValue    = roofSqs * revenuePerSq;
         const weightedValue = grossValue * CLOSING_RATE;
         const estimatedSqs  = roofSqs * CLOSING_RATE;
 

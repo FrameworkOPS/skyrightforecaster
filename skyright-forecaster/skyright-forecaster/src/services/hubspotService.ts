@@ -83,7 +83,7 @@ export class HubSpotService {
         ],
         properties: [
           'dealname',
-          'job_type',
+          'type',
           'roof_squares',
         ],
       });
