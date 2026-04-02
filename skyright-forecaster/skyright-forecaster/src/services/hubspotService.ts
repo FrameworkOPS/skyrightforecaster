@@ -82,8 +82,22 @@ export class HubSpotService {
               },
               {
                 propertyName: 'job_type',
-                operator: 'IN',
-                values: ['Shingles Roof', 'Metal Roof'],
+                operator: 'EQ',
+                value: 'Shingles Roof',
+              },
+            ],
+          },
+          {
+            filters: [
+              {
+                propertyName: 'dealstage',
+                operator: 'EQ',
+                value: '60609659',
+              },
+              {
+                propertyName: 'job_type',
+                operator: 'EQ',
+                value: 'Metal Roof',
               },
             ],
           },
