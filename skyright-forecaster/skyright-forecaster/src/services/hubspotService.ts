@@ -80,46 +80,14 @@ export class HubSpotService {
                 operator: 'EQ',
                 value: '60609659',
               },
-              {
-                propertyName: 'job_type',
-                operator: 'EQ',
-                value: 'Shingles Roof',
-              },
-            ],
-          },
-          {
-            filters: [
-              {
-                propertyName: 'dealstage',
-                operator: 'EQ',
-                value: '60609659',
-              },
-              {
-                propertyName: 'job_type',
-                operator: 'EQ',
-                value: 'Metal Roof',
-              },
             ],
           },
         ],
         properties: [
           'dealname',
-          'dealstage',
           'amount',
-          'closedate',
-          'notes',
-          'associatedcompany',
           'job_type',
           'roof_squares',
-          'hs_date_entered_60609659',
-        ],
-        sorts: [
-          // Sort newest-first by deal create date (hs_v2_date_entered_* properties
-          // are not sortable in HubSpot search — use createdate instead)
-          {
-            propertyName: 'createdate',
-            direction: 'DESCENDING',
-          },
         ],
       });
 
