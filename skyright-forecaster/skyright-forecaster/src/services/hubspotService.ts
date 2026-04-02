@@ -74,12 +74,17 @@ export class HubSpotService {
         limit,
         filterGroups: [
           {
+            // Contract Sent + Shingles Roof
             filters: [
-              {
-                propertyName: 'dealstage',
-                operator: 'EQ',
-                value: '60609659',
-              },
+              { propertyName: 'dealstage', operator: 'EQ', value: '60609659' },
+              { propertyName: 'job_type',  operator: 'EQ', value: 'Shingles Roof' },
+            ],
+          },
+          {
+            // Contract Sent + Metal Roof  (filterGroups are OR'd by HubSpot)
+            filters: [
+              { propertyName: 'dealstage', operator: 'EQ', value: '60609659' },
+              { propertyName: 'job_type',  operator: 'EQ', value: 'Metal Roof' },
             ],
           },
         ],
@@ -88,7 +93,9 @@ export class HubSpotService {
           'amount',
           'job_type',
           'roof_squares',
+          'closedate',
         ],
+        sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
       });
 
       return response.data.results || [];
