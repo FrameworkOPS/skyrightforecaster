@@ -205,6 +205,9 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
     // Map deals — only include "Shingles Roof" and "Metal Roof" job types.
     // All other types are excluded here as a belt-and-suspenders guard
     // (the HubSpot search filter already restricts to these two values).
+    // Log raw job_type values so we can confirm the HubSpot internal enum keys
+    console.log('[HubSpot] raw job_types from Contract Sent:', hubspotDeals.map((d: any) => d.properties?.job_type));
+
     const deals = hubspotDeals
       .map((deal: any) => {
         const rawJobType: string = deal.properties?.job_type || '';
