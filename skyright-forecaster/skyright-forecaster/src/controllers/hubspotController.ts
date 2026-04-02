@@ -207,7 +207,10 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
     // (the HubSpot search filter already restricts to these two values).
     // Log all raw type values and specifically the ones that don't match
     const rawTypes = hubspotDeals.map((d: any) => d.properties?.type);
-    const unmatched = rawTypes.filter((t: any) => t !== 'Metal Roof' && t !== 'Shingles Roof');
+    const unmatched = rawTypes.filter((t: any) => {
+      const segs = (t || '').split(';').map((s: string) => s.trim());
+      return !segs.includes('Metal Roof') && !segs.includes('Shingles Roof');
+    });
     console.log('[HubSpot] total deals fetched:', hubspotDeals.length);
     console.log('[HubSpot] unmatched types (filtered out):', unmatched);
 
@@ -215,13 +218,21 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
       .map((deal: any) => {
         const rawJobType: string = deal.properties?.type || '';
 
-        // Exact HubSpot property values → internal type key
+        // HubSpot "Type" is a multi-select field stored as semicolon-separated
+        // values (e.g. "Metal Roof;Gutters", "Shingles Roof;Metal Roof").
+        // Split and check each segment so we don't drop valid roofing deals.
+        const segments = rawJobType.split(';').map((s: string) => s.trim());
+        const hasMetal    = segments.includes('Metal Roof');
+        const hasShingles = segments.includes('Shingles Roof');
+
+        // If neither roofing type is present, skip (e.g. pure Repair / Gutters)
         const jobType: 'metal' | 'shingle' | null =
-          rawJobType === 'Metal Roof'    ? 'metal'  :
-          rawJobType === 'Shingles Roof' ? 'shingle' :
+          hasMetal && hasShingles ? 'shingle' : // both → treat as shingle (primary)
+          hasMetal                ? 'metal'    :
+          hasShingles             ? 'shingle'  :
           null;
 
-        if (jobType === null) return null; // ignore unrecognised types
+        if (jobType === null) return null; // ignore non-roofing types
 
         // Use actual roof_squares from HubSpot when sales has entered it;
         // fall back to 30 SQs per roof until that field is populated.
