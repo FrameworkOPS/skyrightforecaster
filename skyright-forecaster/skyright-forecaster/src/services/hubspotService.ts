@@ -59,7 +59,14 @@ export class HubSpotService {
   }
 
   /**
-   * Fetch deals in the Contract Signed pipeline stage (internal name: 60609660)
+   * Fetch deals in the Contract Sent pipeline stage (internal ID: 60609659).
+   *
+   * Filters applied at the HubSpot search API level:
+   *   - dealstage = 60609659 (Contract Sent)
+   *   - job_type IN ["Shingles Roof", "Metal Roof"]  (all other types ignored)
+   *
+   * Results sorted newest-first by hs_v2_date_entered_60609659
+   * (the timestamp the deal entered Contract Sent).
    */
   async fetchPendingJobs(limit: number = 100): Promise<HubSpotJob[]> {
     try {
@@ -71,7 +78,12 @@ export class HubSpotService {
               {
                 propertyName: 'dealstage',
                 operator: 'EQ',
-                value: '60609660',
+                value: '60609659',
+              },
+              {
+                propertyName: 'job_type',
+                operator: 'IN',
+                values: ['Shingles Roof', 'Metal Roof'],
               },
             ],
           },
@@ -85,12 +97,19 @@ export class HubSpotService {
           'associatedcompany',
           'job_type',
           'roof_squares',
+          'hs_v2_date_entered_60609659',
+        ],
+        sorts: [
+          {
+            propertyName: 'hs_v2_date_entered_60609659',
+            direction: 'DESCENDING',
+          },
         ],
       });
 
       return response.data.results || [];
     } catch (error) {
-      console.error('Error fetching Contract Signed deals from HubSpot:', error);
+      console.error('Error fetching Contract Sent deals from HubSpot:', error);
       throw new Error('Failed to fetch deals from HubSpot');
     }
   }

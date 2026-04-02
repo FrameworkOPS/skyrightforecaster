@@ -10,6 +10,7 @@ interface HubSpotDeal {
   job_type: 'shingle' | 'metal';
   weighted_value: number;
   estimated_sqs: number;
+  date_entered_contract_sent: string | null;
 }
 
 interface RoofingSquares {
@@ -215,7 +216,7 @@ export default function HubSpotPipelineDisplay() {
     <div className="bg-white rounded-lg shadow p-6 mb-6">
       {/* Header */}
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-xl font-bold text-gray-900">HubSpot Pipeline — Contract Signed</h3>
+        <h3 className="text-xl font-bold text-gray-900">HubSpot Pipeline — Contract Sent</h3>
         <div className="flex gap-2">
           <button
             onClick={handlePushToSalesForecast}
@@ -307,6 +308,7 @@ export default function HubSpotPipelineDisplay() {
             <thead className="bg-gray-100 border-b border-gray-200">
               <tr>
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Deal Name</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-700">Entered Contract Sent</th>
                 <th className="px-4 py-3 text-right font-medium text-gray-700">Amount</th>
                 <th className="px-4 py-3 text-center font-medium text-gray-700">Job Type</th>
                 <th className="px-4 py-3 text-right font-medium text-gray-700">Weighted Value</th>
@@ -317,6 +319,13 @@ export default function HubSpotPipelineDisplay() {
               {filteredDeals.map((deal) => (
                 <tr key={deal.hubspot_id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-900 font-medium">{deal.dealname}</td>
+                  <td className="px-4 py-3 text-gray-500 text-sm">
+                    {deal.date_entered_contract_sent
+                      ? new Date(deal.date_entered_contract_sent).toLocaleDateString('en-US', {
+                          month: 'short', day: 'numeric', year: '2-digit',
+                        })
+                      : '—'}
+                  </td>
                   <td className="px-4 py-3 text-right text-gray-900">
                     ${deal.amount.toLocaleString()}
                   </td>
@@ -358,7 +367,8 @@ export default function HubSpotPipelineDisplay() {
       )}
 
       <div className="mt-4 pt-4 border-t border-gray-200 text-xs text-gray-500">
-        Calculation: Deal Amount × {(CLOSING_RATE * 100).toFixed(0)}% closing rate × type ratio.{' '}
+        Weighted Value = Deal Amount × {(CLOSING_RATE * 100).toFixed(0)}% closing rate. Est. SQs = Weighted Value ÷ revenue/sq ($
+        {REVENUE_PER_SQ.shingles.toLocaleString()} shingle / ${REVENUE_PER_SQ.metal.toLocaleString()} metal).{' '}
         <strong>Push to Sales Forecast</strong> distributes weighted SQs evenly across all 26 weeks.
       </div>
     </div>

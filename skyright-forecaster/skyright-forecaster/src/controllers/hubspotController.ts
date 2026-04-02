@@ -3,7 +3,7 @@ import { query } from '../config/database';
 import HubSpotService, { RoofingSquaresSummary } from '../services/hubspotService';
 import { AppError, asyncHandler } from '../middleware/errorHandler';
 import { getUUID } from '../utils/uuid';
-import { CLOSING_RATE, CREW_TYPE_RATIOS, REVENUE_PER_SQ } from '../constants/businessConstants';
+import { CLOSING_RATE, REVENUE_PER_SQ } from '../constants/businessConstants';
 
 export const initiateOAuth = asyncHandler(async (req: Request, res: Response) => {
   const clientId = process.env.HUBSPOT_CLIENT_ID;
@@ -190,26 +190,43 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
   try {
     const hubspotService = new HubSpotService(hubspotAccessToken);
 
-    // Fetch Contract Signed deals and all production-stage tickets in parallel
+    // Fetch Contract Sent deals and all production-stage tickets in parallel
     const [hubspotDeals, productionTickets] = await Promise.all([
       hubspotService.fetchPendingJobs(50),
       hubspotService.fetchProductionTickets(),
     ]);
 
-    const deals = hubspotDeals.map((deal: any) => {
-      const amount = deal.properties?.amount ? parseFloat(deal.properties.amount) : 0;
-      const rawJobType: string = deal.properties?.job_type || '';
-      const jobType = rawJobType === 'Metal Roof' ? 'metal' : 'shingle';
+    // Map deals — only include "Shingles Roof" and "Metal Roof" job types.
+    // All other types are excluded here as a belt-and-suspenders guard
+    // (the HubSpot search filter already restricts to these two values).
+    const deals = hubspotDeals
+      .map((deal: any) => {
+        const rawJobType: string = deal.properties?.job_type || '';
 
-      return {
-        hubspot_id: deal.id,
-        dealname: deal.properties?.dealname || 'Unnamed Deal',
-        amount,
-        job_type: jobType,
-        weighted_value: amount * CLOSING_RATE * (jobType === 'metal' ? CREW_TYPE_RATIOS.metal : CREW_TYPE_RATIOS.shingles),
-        estimated_sqs: (amount * CLOSING_RATE * (jobType === 'metal' ? CREW_TYPE_RATIOS.metal : CREW_TYPE_RATIOS.shingles)) / (jobType === 'metal' ? REVENUE_PER_SQ.metal : REVENUE_PER_SQ.shingles),
-      };
-    });
+        // Exact HubSpot property values → internal type key
+        const jobType: 'metal' | 'shingle' | null =
+          rawJobType === 'Metal Roof'    ? 'metal'  :
+          rawJobType === 'Shingles Roof' ? 'shingle' :
+          null;
+
+        if (jobType === null) return null; // ignore unrecognised types
+
+        const amount = deal.properties?.amount ? parseFloat(deal.properties.amount) : 0;
+        const dateEnteredContractSent: string | null =
+          deal.properties?.hs_v2_date_entered_60609659 ?? null;
+
+        return {
+          hubspot_id: deal.id,
+          dealname: deal.properties?.dealname || 'Unnamed Deal',
+          amount,
+          job_type: jobType,
+          date_entered_contract_sent: dateEnteredContractSent,
+          weighted_value: amount * CLOSING_RATE,
+          estimated_sqs: (amount * CLOSING_RATE) /
+            (jobType === 'metal' ? REVENUE_PER_SQ.metal : REVENUE_PER_SQ.shingles),
+        };
+      })
+      .filter((d: any) => d !== null);
 
     const totalWeightedValue = deals.reduce((sum: number, d: any) => sum + d.weighted_value, 0);
     const totalWeightedSqs = deals.reduce((sum: number, d: any) => sum + d.estimated_sqs, 0);
