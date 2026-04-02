@@ -111,7 +111,7 @@ export class HubSpotService {
           'associatedcompany',
           'job_type',
           'roof_squares',
-          'hs_v2_date_entered_60609659',
+          'hs_date_entered_60609659',
         ],
         sorts: [
           // Sort newest-first by deal create date (hs_v2_date_entered_* properties

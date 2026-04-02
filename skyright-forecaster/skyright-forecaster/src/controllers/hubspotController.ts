@@ -219,7 +219,7 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
 
         const amount = deal.properties?.amount ? parseFloat(deal.properties.amount) : 0;
         const dateEnteredContractSent: string | null =
-          deal.properties?.hs_v2_date_entered_60609659 ?? null;
+          deal.properties?.hs_date_entered_60609659 ?? null;
 
         // Use actual roof_squares from HubSpot when sales has entered it;
         // fall back to 30 SQs per roof until that field is populated.
