@@ -73,7 +73,7 @@ const frontendDist = path.join(__dirname, '../../frontend/dist');
 app.use(express.static(frontendDist));
 
 // All non-API routes return the React app (client-side routing)
-app.get('*', (req: Request, res: Response) => {
+app.use((req: Request, res: Response) => {
   res.sendFile(path.join(frontendDist, 'index.html'));
 });
 
