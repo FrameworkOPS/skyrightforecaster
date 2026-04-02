@@ -10,6 +10,8 @@ interface HubSpotDeal {
   job_type: 'shingle' | 'metal';
   weighted_value: number;
   estimated_sqs: number;
+  roof_sqs: number;
+  using_default_sqs: boolean;
   date_entered_contract_sent: string | null;
 }
 
@@ -311,8 +313,9 @@ export default function HubSpotPipelineDisplay() {
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Entered Contract Sent</th>
                 <th className="px-4 py-3 text-right font-medium text-gray-700">Amount</th>
                 <th className="px-4 py-3 text-center font-medium text-gray-700">Job Type</th>
+                <th className="px-4 py-3 text-right font-medium text-gray-700">Roof SQs</th>
                 <th className="px-4 py-3 text-right font-medium text-gray-700">Weighted Value</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-700">Est. SQs</th>
+                <th className="px-4 py-3 text-right font-medium text-gray-700">Est. SQs (×40%)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -353,11 +356,17 @@ export default function HubSpotPipelineDisplay() {
                       switch
                     </button>
                   </td>
+                  <td className="px-4 py-3 text-right text-gray-900">
+                    {deal.roof_sqs}
+                    {deal.using_default_sqs && (
+                      <span className="ml-1 text-xs text-gray-400 italic" title="Sales hasn't entered roof squares yet — using 30 SQ default">est.</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-right text-gray-900 font-medium">
                     ${deal.weighted_value.toLocaleString()}
                   </td>
                   <td className="px-4 py-3 text-right text-gray-900">
-                    {deal.estimated_sqs.toFixed(0)}
+                    {deal.estimated_sqs.toFixed(1)}
                   </td>
                 </tr>
               ))}
@@ -367,9 +376,9 @@ export default function HubSpotPipelineDisplay() {
       )}
 
       <div className="mt-4 pt-4 border-t border-gray-200 text-xs text-gray-500">
-        Weighted Value = Deal Amount × {(CLOSING_RATE * 100).toFixed(0)}% closing rate. Est. SQs = Weighted Value ÷ revenue/sq ($
-        {REVENUE_PER_SQ.shingles.toLocaleString()} shingle / ${REVENUE_PER_SQ.metal.toLocaleString()} metal).{' '}
-        <strong>Push to Sales Forecast</strong> distributes weighted SQs evenly across all 26 weeks.
+        Roof SQs: actual value from HubSpot, or <strong>30 SQ default</strong> until sales enters it (<em>est.</em> label). Est. SQs = Roof SQs × {(CLOSING_RATE * 100).toFixed(0)}% closing rate.{' '}
+        Weighted Value = Deal Amount × {(CLOSING_RATE * 100).toFixed(0)}%.{' '}
+        <strong>Push to Sales Forecast</strong> distributes estimated SQs evenly across all 26 weeks.
       </div>
     </div>
   );

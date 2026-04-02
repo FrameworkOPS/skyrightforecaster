@@ -215,15 +215,23 @@ export const getPipelineSummary = asyncHandler(async (req: Request, res: Respons
         const dateEnteredContractSent: string | null =
           deal.properties?.hs_v2_date_entered_60609659 ?? null;
 
+        // Use actual roof_squares from HubSpot when sales has entered it;
+        // fall back to 30 SQs per roof until that field is populated.
+        const DEFAULT_SQS = 30;
+        const roofSqs = deal.properties?.roof_squares
+          ? parseFloat(deal.properties.roof_squares)
+          : DEFAULT_SQS;
+
         return {
           hubspot_id: deal.id,
           dealname: deal.properties?.dealname || 'Unnamed Deal',
           amount,
           job_type: jobType,
           date_entered_contract_sent: dateEnteredContractSent,
+          roof_sqs: roofSqs,
+          using_default_sqs: !deal.properties?.roof_squares,
           weighted_value: amount * CLOSING_RATE,
-          estimated_sqs: (amount * CLOSING_RATE) /
-            (jobType === 'metal' ? REVENUE_PER_SQ.metal : REVENUE_PER_SQ.shingles),
+          estimated_sqs: roofSqs * CLOSING_RATE,
         };
       })
       .filter((d: any) => d !== null);
