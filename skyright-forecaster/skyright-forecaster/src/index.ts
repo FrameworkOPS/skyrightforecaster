@@ -1,4 +1,5 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
+import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
@@ -67,9 +68,13 @@ app.use('/api/metrics', metricsRoutes);
 app.use('/api/hubspot', hubspotRoutes);
 app.use('/api/insights', insightsRoutes);
 
-// 404 handler
-app.use((req: Request, res: Response) => {
-  res.status(404).json({ error: 'Route not found' });
+// Serve React frontend static files
+const frontendDist = path.join(__dirname, '../../frontend/dist');
+app.use(express.static(frontendDist));
+
+// All non-API routes return the React app (client-side routing)
+app.get('*', (req: Request, res: Response) => {
+  res.sendFile(path.join(frontendDist, 'index.html'));
 });
 
 // Error handler (must be last)
