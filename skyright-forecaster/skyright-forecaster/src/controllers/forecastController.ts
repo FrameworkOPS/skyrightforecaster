@@ -618,13 +618,20 @@ export const getSixMonthForecast = asyncHandler(async (req: Request, res: Respon
       ? rollingPipelineMetal / productionByType.metal
       : 0);
 
-    // Get crew changes for this week
+    // Get crew changes for this week.
+    // Match any crew whose start/terminate date falls anywhere within the
+    // 7-day window starting on this Monday — not just on the Monday itself,
+    // since H2B and other crews often have mid-week start/end dates.
     const crewAddResult = await query(
-      `SELECT COALESCE(crew_name, 'Unnamed Crew') as crew_name, crew_type FROM crews WHERE start_date = $1::date`,
+      `SELECT COALESCE(crew_name, 'Unnamed Crew') as crew_name, crew_type
+       FROM crews
+       WHERE start_date >= $1::date AND start_date < ($1::date + INTERVAL '7 days')`,
       [weekStr]
     );
     const crewRemoveResult = await query(
-      `SELECT COALESCE(crew_name, 'Unnamed Crew') as crew_name, crew_type FROM crews WHERE terminate_date = $1::date`,
+      `SELECT COALESCE(crew_name, 'Unnamed Crew') as crew_name, crew_type
+       FROM crews
+       WHERE terminate_date >= $1::date AND terminate_date < ($1::date + INTERVAL '7 days')`,
       [weekStr]
     );
     const crewChanges = [
