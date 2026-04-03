@@ -229,48 +229,43 @@ export default function SalesForecastInput() {
   };
 
   /**
-   * Forward-fill: find the last week that has a value, then copy it into
-   * ALL subsequent weeks — overwriting any existing values.
+   * Forward-fill: find the FIRST week that has a value, then write that
+   * same value to every week after it — overwriting anything already there.
+   * This lets you edit week 1, click Copy All, and have all 26 weeks update.
    */
   const handleCopyAllWeeks = async (jobType: 'shingle' | 'metal') => {
     setError(null);
     const currentWeeks = getWeeks();
     const label = jobType === 'shingle' ? 'Shingle' : 'Metal';
 
-    // Snapshot forecasts at click time so getValue is consistent
+    // Snapshot forecasts at click time so getValue is stable
     const snapshot = forecasts;
-    const snapGet = (week: string) => {
-      const item = snapshot.find(
+    const snapGet = (week: string) =>
+      snapshot.find(
         (f) => f.forecast_week.substring(0, 10) === week && f.job_type === jobType
-      );
-      return item?.projected_square_footage || 0;
-    };
+      )?.projected_square_footage || 0;
 
-    let lastValue = 0;
-    let lastIndex = -1;
-    currentWeeks.forEach((w, i) => {
-      const v = snapGet(w);
-      if (v > 0) { lastValue = v; lastIndex = i; }
-    });
+    // Use the FIRST non-zero week as the source value
+    const firstFilledIndex = currentWeeks.findIndex((w) => snapGet(w) > 0);
 
-    if (lastIndex === -1) {
-      setError(`No ${label} values found to copy from. Enter at least one week first.`);
+    if (firstFilledIndex === -1) {
+      setError(`No ${label} values found. Enter at least one week first.`);
       return;
     }
 
-    // Copy to ALL weeks after the last entry — including ones already filled
-    const weeksToCopy = currentWeeks.slice(lastIndex + 1);
+    const sourceValue = snapGet(currentWeeks[firstFilledIndex]);
+    // All weeks after the first filled one get overwritten
+    const weeksToCopy = currentWeeks.slice(firstFilledIndex + 1);
 
     if (weeksToCopy.length === 0) {
-      setError(`${label}: the last entered value is already in the final week.`);
+      setError(`${label}: only one week in the table — nothing to copy to.`);
       return;
     }
 
     setCopyingAll(jobType);
     try {
-      // Sequential posts so a single failure surfaces immediately
       for (const w of weeksToCopy) {
-        await postForecast(w, jobType, lastValue);
+        await postForecast(w, jobType, sourceValue);
       }
       await loadForecasts();
     } catch (err) {
