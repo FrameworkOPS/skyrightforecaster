@@ -230,7 +230,7 @@ export default function SalesForecastInput() {
 
   /**
    * Forward-fill: find the last week that has a value, then copy it into
-   * every subsequent empty week. Posts sequentially so errors surface clearly.
+   * ALL subsequent weeks — overwriting any existing values.
    */
   const handleCopyAllWeeks = async (jobType: 'shingle' | 'metal') => {
     setError(null);
@@ -258,12 +258,11 @@ export default function SalesForecastInput() {
       return;
     }
 
-    const weeksToCopy = currentWeeks
-      .slice(lastIndex + 1)
-      .filter((w) => snapGet(w) === 0);
+    // Copy to ALL weeks after the last entry — including ones already filled
+    const weeksToCopy = currentWeeks.slice(lastIndex + 1);
 
     if (weeksToCopy.length === 0) {
-      setError(`All ${label} weeks after the last entry are already filled.`);
+      setError(`${label}: the last entered value is already in the final week.`);
       return;
     }
 
