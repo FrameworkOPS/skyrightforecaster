@@ -148,20 +148,16 @@ export const getMetricsDashboardData = asyncHandler(async (req: Request, res: Re
     salesByKey[`${wk}_${r.job_type}`] = parseFloat(r.sqs) || 0;
   });
 
-  // ── 5. Staff per crew (latest record per crew, using ROW_NUMBER for reliability) ──
-  // Using ROW_NUMBER() instead of DISTINCT ON to avoid issues if added_date column
-  // is missing or NULL; created_at is always present.
+  // ── 5. Staff per crew — join on is_active = true only ───────────────────
+  // crew_staff marks old rows is_active = false when a new record is saved,
+  // so filtering to is_active = true always gives the current staff numbers.
+  // This mirrors the exact pattern used by getAllCrewsStaffSummary.
   const staffResult = await query(
-    `WITH ranked_staff AS (
-       SELECT crew_id, lead_count, super_count,
-              ROW_NUMBER() OVER (PARTITION BY crew_id ORDER BY created_at DESC) AS rn
-       FROM crew_staff
-     )
-     SELECT c.id as crew_id, c.crew_name, c.crew_type,
-            COALESCE(rs.lead_count, 0) AS lead_count,
-            COALESCE(rs.super_count, 0) AS super_count
+    `SELECT c.id AS crew_id, c.crew_name, c.crew_type,
+            COALESCE(cs.lead_count, 0)  AS lead_count,
+            COALESCE(cs.super_count, 0) AS super_count
      FROM crews c
-     LEFT JOIN ranked_staff rs ON rs.crew_id = c.id AND rs.rn = 1
+     LEFT JOIN crew_staff cs ON cs.crew_id = c.id AND cs.is_active = true
      WHERE c.is_active = true
      ORDER BY c.crew_type, c.crew_name`
   );
