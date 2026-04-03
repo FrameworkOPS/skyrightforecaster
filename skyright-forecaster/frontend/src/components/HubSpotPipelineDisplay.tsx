@@ -91,10 +91,59 @@ export default function HubSpotPipelineDisplay() {
     }
   };
 
+  // ─── Shared push helper ────────────────────────────────────────────────────
+
+  const PUSH_WEEKS = 8; // only push into the nearest 8 weeks
+
   /**
-   * Distribute total weighted SQs (by type) evenly across the 6-month
-   * weekly window and write them to the sales forecast. Confirms before
-   * overwriting.
+   * Fetch existing forecast values for a set of weeks so we can ADD to them
+   * instead of overwriting them.
+   */
+  const fetchExistingForecasts = async (weeks: string[]): Promise<Map<string, { shingle: number; metal: number }>> => {
+    const map = new Map<string, { shingle: number; metal: number }>();
+    weeks.forEach((w) => map.set(w, { shingle: 0, metal: 0 }));
+    try {
+      const params = new URLSearchParams({
+        startWeek: weeks[0],
+        endWeek: weeks[weeks.length - 1],
+        limit: '200',
+      });
+      const res = await fetch(`${API_BASE_URL}/api/sales-forecast?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        (data.data || []).forEach((row: any) => {
+          const w = row.forecast_week.substring(0, 10);
+          const entry = map.get(w);
+          if (entry) {
+            if (row.job_type === 'shingle') entry.shingle = row.projected_square_footage || 0;
+            if (row.job_type === 'metal')   entry.metal   = row.projected_square_footage || 0;
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('Could not fetch existing forecasts, will add to 0:', err);
+    }
+    return map;
+  };
+
+  const postForecastValue = (week: string, jobType: string, sqs: number, notes: string) =>
+    fetch(`${API_BASE_URL}/api/sales-forecast`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        forecastWeek: week,
+        jobType,
+        projectedSquareFootage: Math.round(sqs),
+        projectedJobCount: 0,
+        notes,
+      }),
+    });
+
+  /**
+   * Distribute total weighted deal SQs (by type) evenly across the first
+   * 8 weeks and ADD to whatever is already in those weeks.
    */
   const handlePushToSalesForecast = async () => {
     const shingleTotal = deals
@@ -109,61 +158,35 @@ export default function HubSpotPipelineDisplay() {
       return;
     }
 
-    const weeks = getForecastWeeks();
-    const numWeeks = weeks.length;
-    const weeklyShingle = Math.round(shingleTotal / numWeeks);
-    const weeklyMetal = Math.round(metalTotal / numWeeks);
+    const weeks = getForecastWeeks().slice(0, PUSH_WEEKS);
+    const weeklyShingle = shingleTotal / weeks.length;
+    const weeklyMetal   = metalTotal   / weeks.length;
 
     const confirmed = window.confirm(
-      `Push weighted pipeline to Sales Forecast?\n\n` +
-        `Shingle: ${shingleTotal.toFixed(0)} total SQs → ${weeklyShingle} SQs/week\n` +
-        `Metal:   ${metalTotal.toFixed(0)} total SQs → ${weeklyMetal} SQs/week\n\n` +
-        `Distributed evenly across ${numWeeks} weeks. This will overwrite existing values.`
+      `Push weighted deal pipeline to Sales Forecast?\n\n` +
+        `Shingle: ${shingleTotal.toFixed(0)} total SQs → +${Math.round(weeklyShingle)} SQs/week\n` +
+        `Metal:   ${metalTotal.toFixed(0)} total SQs → +${Math.round(weeklyMetal)} SQs/week\n\n` +
+        `Added on top of existing values across the next ${weeks.length} weeks.`
     );
     if (!confirmed) return;
 
     setPushing(true);
     try {
+      const existing = await fetchExistingForecasts(weeks);
       const posts: Promise<Response>[] = [];
 
-      if (weeklyShingle > 0) {
-        weeks.forEach((w) =>
-          posts.push(
-            fetch(`${API_BASE_URL}/api/sales-forecast`, {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                forecastWeek: w,
-                jobType: 'shingle',
-                projectedSquareFootage: weeklyShingle,
-                projectedJobCount: 0,
-                notes: 'HubSpot weighted pipeline',
-              }),
-            })
-          )
-        );
-      }
-
-      if (weeklyMetal > 0) {
-        weeks.forEach((w) =>
-          posts.push(
-            fetch(`${API_BASE_URL}/api/sales-forecast`, {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                forecastWeek: w,
-                jobType: 'metal',
-                projectedSquareFootage: weeklyMetal,
-                projectedJobCount: 0,
-                notes: 'HubSpot weighted pipeline',
-              }),
-            })
-          )
-        );
-      }
+      weeks.forEach((w) => {
+        const cur = existing.get(w) || { shingle: 0, metal: 0 };
+        if (weeklyShingle > 0) {
+          posts.push(postForecastValue(w, 'shingle', cur.shingle + weeklyShingle, 'HubSpot weighted pipeline'));
+        }
+        if (weeklyMetal > 0) {
+          posts.push(postForecastValue(w, 'metal', cur.metal + weeklyMetal, 'HubSpot weighted pipeline'));
+        }
+      });
 
       await Promise.all(posts);
-      alert('Sales forecast updated! Refresh the Sales Forecast table to see the changes.');
+      alert(`Done! Added deal pipeline SQs to the next ${weeks.length} weeks. Refresh the Sales Forecast table to see the changes.`);
     } catch (err) {
       console.error('Error pushing to sales forecast:', err);
       alert('Failed to push to sales forecast. Check console for details.');
@@ -173,9 +196,8 @@ export default function HubSpotPipelineDisplay() {
   };
 
   /**
-   * Push ticket pipeline SQs to the sales forecast.
-   * Ticket SQs represent jobs already in production — push the total
-   * into the current week only (they're imminent, not spread over 6 months).
+   * Distribute ticket pipeline SQs evenly across the first 8 weeks and
+   * ADD to whatever is already in those weeks.
    */
   const handlePushTicketsToForecast = async () => {
     if (!roofingSquares) return;
@@ -186,61 +208,35 @@ export default function HubSpotPipelineDisplay() {
       return;
     }
 
-    const weeks = getForecastWeeks();
-    const numWeeks = weeks.length;
-    const weeklyShingle = Math.round(shingles / numWeeks);
-    const weeklyMetal   = Math.round(metal   / numWeeks);
+    const weeks = getForecastWeeks().slice(0, PUSH_WEEKS);
+    const weeklyShingle = shingles / weeks.length;
+    const weeklyMetal   = metal   / weeks.length;
 
     const confirmed = window.confirm(
       `Push ticket pipeline SQs to Sales Forecast?\n\n` +
-        `Shingle: ${shingles.toFixed(0)} total SQs → ${weeklyShingle} SQs/week\n` +
-        `Metal:   ${metal.toFixed(0)} total SQs → ${weeklyMetal} SQs/week\n\n` +
-        `Distributed evenly across ${numWeeks} weeks. This will overwrite existing values.`
+        `Shingle: ${shingles.toFixed(0)} total SQs → +${Math.round(weeklyShingle)} SQs/week\n` +
+        `Metal:   ${metal.toFixed(0)} total SQs → +${Math.round(weeklyMetal)} SQs/week\n\n` +
+        `Added on top of existing values across the next ${weeks.length} weeks.`
     );
     if (!confirmed) return;
 
     setPushingTickets(true);
     try {
+      const existing = await fetchExistingForecasts(weeks);
       const posts: Promise<Response>[] = [];
 
-      if (weeklyShingle > 0) {
-        weeks.forEach((w) =>
-          posts.push(
-            fetch(`${API_BASE_URL}/api/sales-forecast`, {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                forecastWeek: w,
-                jobType: 'shingle',
-                projectedSquareFootage: weeklyShingle,
-                projectedJobCount: 0,
-                notes: 'HubSpot ticket pipeline',
-              }),
-            })
-          )
-        );
-      }
-
-      if (weeklyMetal > 0) {
-        weeks.forEach((w) =>
-          posts.push(
-            fetch(`${API_BASE_URL}/api/sales-forecast`, {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                forecastWeek: w,
-                jobType: 'metal',
-                projectedSquareFootage: weeklyMetal,
-                projectedJobCount: 0,
-                notes: 'HubSpot ticket pipeline',
-              }),
-            })
-          )
-        );
-      }
+      weeks.forEach((w) => {
+        const cur = existing.get(w) || { shingle: 0, metal: 0 };
+        if (weeklyShingle > 0) {
+          posts.push(postForecastValue(w, 'shingle', cur.shingle + weeklyShingle, 'HubSpot ticket pipeline'));
+        }
+        if (weeklyMetal > 0) {
+          posts.push(postForecastValue(w, 'metal', cur.metal + weeklyMetal, 'HubSpot ticket pipeline'));
+        }
+      });
 
       await Promise.all(posts);
-      alert('Sales forecast updated with ticket pipeline SQs! Refresh the Sales Forecast table to see the changes.');
+      alert(`Done! Added ticket pipeline SQs to the next ${weeks.length} weeks. Refresh the Sales Forecast table to see the changes.`);
     } catch (err) {
       console.error('Error pushing ticket SQs to sales forecast:', err);
       alert('Failed to push ticket SQs. Check console for details.');

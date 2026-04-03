@@ -167,8 +167,8 @@ export default function SalesForecastInput() {
     }
   };
 
-  const postForecast = (week: string, jobType: string, sqs: number, notes?: string | null) =>
-    fetch(`${API_BASE_URL}/api/sales-forecast`, {
+  const postForecast = async (week: string, jobType: string, sqs: number, notes?: string | null) => {
+    const res = await fetch(`${API_BASE_URL}/api/sales-forecast`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -179,6 +179,12 @@ export default function SalesForecastInput() {
         notes: notes ?? null,
       }),
     });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message || `Save failed (${res.status}) for ${jobType} week ${week}`);
+    }
+    return res;
+  };
 
   const handleSave = async (week: string, jobType: string) => {
     setError(null);
@@ -223,39 +229,53 @@ export default function SalesForecastInput() {
   };
 
   /**
-   * Forward-fill: find the last week with a non-zero value, then copy it
-   * into every subsequent week that is still empty.
+   * Forward-fill: find the last week that has a value, then copy it into
+   * every subsequent empty week. Posts sequentially so errors surface clearly.
    */
   const handleCopyAllWeeks = async (jobType: 'shingle' | 'metal') => {
+    setError(null);
     const currentWeeks = getWeeks();
+    const label = jobType === 'shingle' ? 'Shingle' : 'Metal';
+
+    // Snapshot forecasts at click time so getValue is consistent
+    const snapshot = forecasts;
+    const snapGet = (week: string) => {
+      const item = snapshot.find(
+        (f) => f.forecast_week.substring(0, 10) === week && f.job_type === jobType
+      );
+      return item?.projected_square_footage || 0;
+    };
 
     let lastValue = 0;
     let lastIndex = -1;
     currentWeeks.forEach((w, i) => {
-      const v = getValue(w, jobType);
+      const v = snapGet(w);
       if (v > 0) { lastValue = v; lastIndex = i; }
     });
 
-    if (lastValue === 0 || lastIndex === -1) {
-      setError(`No ${jobType === 'shingle' ? 'Shingle' : 'Metal'} values found to copy from. Enter at least one week first.`);
+    if (lastIndex === -1) {
+      setError(`No ${label} values found to copy from. Enter at least one week first.`);
       return;
     }
 
     const weeksToCopy = currentWeeks
       .slice(lastIndex + 1)
-      .filter((w) => getValue(w, jobType) === 0);
+      .filter((w) => snapGet(w) === 0);
 
     if (weeksToCopy.length === 0) {
-      setError(`All ${jobType === 'shingle' ? 'Shingle' : 'Metal'} weeks are already filled.`);
+      setError(`All ${label} weeks after the last entry are already filled.`);
       return;
     }
 
     setCopyingAll(jobType);
     try {
-      await Promise.all(weeksToCopy.map((w) => postForecast(w, jobType, lastValue)));
+      // Sequential posts so a single failure surfaces immediately
+      for (const w of weeksToCopy) {
+        await postForecast(w, jobType, lastValue);
+      }
       await loadForecasts();
     } catch (err) {
-      setError('Error copying weeks. Please try again.');
+      setError(err instanceof Error ? err.message : 'Error copying weeks. Please try again.');
       console.error('Copy all error:', err);
     } finally {
       setCopyingAll(null);
