@@ -121,8 +121,15 @@ export const uploadDocument = async (projectId: string, file: File, docType: str
   return res.data.data;
 };
 
-export const parseDocument = async (projectId: string, docId: string): Promise<any> => {
-  const res = await axios.post(`${base}/${projectId}/documents/${docId}/parse`, {}, { headers: authHeaders() });
+export type ParseScope = 'roofing' | 'siding' | 'both';
+
+export const parseDocument = async (
+  projectId: string,
+  docId: string,
+  scope?: ParseScope,
+): Promise<any> => {
+  const body = scope ? { scope } : {};
+  const res = await axios.post(`${base}/${projectId}/documents/${docId}/parse`, body, { headers: authHeaders() });
   return res.data.data;
 };
 

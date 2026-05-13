@@ -202,7 +202,12 @@ export default function EstimateDetail() {
       {/* Tab Content */}
       <div className="max-w-7xl mx-auto px-4 py-6">
         {tab === 'documents' && (
-          <DocumentsTab projectId={id!} docs={project.documents || []} onRefresh={load} />
+          <DocumentsTab
+            projectId={id!}
+            docs={project.documents || []}
+            projectType={project.project_type}
+            onRefresh={load}
+          />
         )}
         {tab === 'takeoffs' && (
           <TakeoffsTab projectId={id!} takeoffs={project.takeoffs || []} onRefresh={load} />
@@ -298,7 +303,7 @@ export default function EstimateDetail() {
 // ─────────────────────────────────────────────────────────────────────────────
 // DOCUMENTS TAB
 // ─────────────────────────────────────────────────────────────────────────────
-function DocumentsTab({ projectId, docs, onRefresh }: { projectId: string; docs: EstimateDocument[]; onRefresh: () => void }) {
+function DocumentsTab({ projectId, docs, projectType, onRefresh }: { projectId: string; docs: EstimateDocument[]; projectType?: string; onRefresh: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [parsing, setParsing] = useState<string | null>(null)
@@ -307,6 +312,16 @@ function DocumentsTab({ projectId, docs, onRefresh }: { projectId: string; docs:
   const [parseResult, setParseResult] = useState<{ docId: string; summary: string } | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  // Parse scope — defaults to the project's project_type, can be overridden per parse
+  const defaultScope: 'roofing' | 'siding' | 'both' =
+    projectType === 'siding' ? 'siding' : projectType === 'both' ? 'both' : 'roofing'
+  const [parseScope, setParseScope] = useState<'roofing' | 'siding' | 'both'>(defaultScope)
+
+  // Re-sync scope when project_type changes (e.g. user edits the project)
+  useEffect(() => {
+    setParseScope(defaultScope)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectType])
 
   // Drop selections that point at docs no longer in the list (e.g. after refresh)
   useEffect(() => {
@@ -341,7 +356,7 @@ function DocumentsTab({ projectId, docs, onRefresh }: { projectId: string; docs:
     setError('')
     setParseResult(null)
     try {
-      const result = await parseDocument(projectId, docId)
+      const result = await parseDocument(projectId, docId, parseScope)
       setParseResult({ docId, summary: result.summary || 'Parsing complete. Data added to takeoffs, specs, line items, and concerns.' })
       onRefresh()
     } catch (err: any) {
@@ -427,6 +442,41 @@ function DocumentsTab({ projectId, docs, onRefresh }: { projectId: string; docs:
           {uploading && <span className="text-sm text-teal-600 animate-pulse">Uploading…</span>}
         </div>
         {error && <p className="text-red-600 text-sm mt-3">{error}</p>}
+      </div>
+
+      {/* Parse scope selector */}
+      <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 flex items-center gap-4 flex-wrap">
+        <div>
+          <p className="text-sm font-medium text-gray-900">AI Parse Scope</p>
+          <p className="text-xs text-gray-500">Tell the AI which trades to extract from these documents</p>
+        </div>
+        <div className="flex gap-1 ml-auto">
+          {([
+            { key: 'roofing', label: 'Roofing only', icon: '🏠' },
+            { key: 'siding', label: 'Siding only', icon: '🧱' },
+            { key: 'both', label: 'Both', icon: '🔀' },
+          ] as const).map(opt => {
+            const active = parseScope === opt.key
+            const isDefault = opt.key === defaultScope
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => setParseScope(opt.key)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 ${
+                  active
+                    ? 'bg-teal-700 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+                title={isDefault ? `${opt.label} (project default)` : opt.label}
+              >
+                <span>{opt.icon}</span>
+                {opt.label}
+                {isDefault && !active && <span className="text-[10px] text-gray-400 ml-1">default</span>}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* Parse result */}

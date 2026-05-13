@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import fs from 'fs';
 import { query } from '../config/database';
 import { AppError, asyncHandler } from '../middleware/errorHandler';
-import { parsePdfBuffer, LineItemSuggestion } from '../services/pdfParserService';
+import { parsePdfBuffer, LineItemSuggestion, ParseScope, isValidParseScope } from '../services/pdfParserService';
 import { generateBidPdf } from '../services/bidGeneratorService';
 
 // Look up a price for a single line item. Returns { unit_price, flagged }.
@@ -160,6 +160,17 @@ export const parseDocument = asyncHandler(async (req: Request, res: Response) =>
 
   const doc = docResult.rows[0];
 
+  // Resolve scope: request body > project's project_type > 'both'
+  // project_type is 'roofing' | 'siding' | 'both' so it maps directly to ParseScope
+  let scope: ParseScope = 'both';
+  if (isValidParseScope(req.body?.scope)) {
+    scope = req.body.scope;
+  } else {
+    const projResult = await query('SELECT project_type FROM estimate_projects WHERE id = $1', [projectId]);
+    const projectType = projResult.rows[0]?.project_type;
+    if (isValidParseScope(projectType)) scope = projectType;
+  }
+
   // Prefer DB-stored bytes (survives ephemeral restarts); fall back to disk path
   let buffer: Buffer | null = null;
   if (doc.file_bytes) {
@@ -178,7 +189,7 @@ export const parseDocument = asyncHandler(async (req: Request, res: Response) =>
     );
   }
 
-  const parsed = await parsePdfBuffer(buffer);
+  const parsed = await parsePdfBuffer(buffer, scope);
 
   await query(
     'UPDATE estimate_documents SET parsed = true, parsed_data = $1, parsed_at = NOW(), doc_type = $2 WHERE id = $3',

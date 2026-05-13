@@ -9,6 +9,13 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MAX_CHUNK_BYTES = 18 * 1024 * 1024;
 const MAX_CHUNK_PAGES = 30;
 
+// Parse scope — controls which trades the AI extracts from a document
+export type ParseScope = 'roofing' | 'siding' | 'both';
+
+export function isValidParseScope(s: any): s is ParseScope {
+  return s === 'roofing' || s === 'siding' || s === 'both';
+}
+
 interface ParsedDocument {
   docType: 'roofscope' | 'sidingscope' | 'spec_sheet' | 'plan_set' | 'unknown';
   takeoffs: TakeoffItem[];
@@ -52,7 +59,46 @@ export interface LineItemSuggestion {
   material_key?: string;
 }
 
-const PARSE_PROMPT = `You are an expert estimator for a commercial roofing and siding contractor in the Pacific Northwest. Analyze this PDF and extract EVERY piece of estimating data.
+function scopeBanner(scope: ParseScope): string {
+  if (scope === 'roofing') {
+    return [
+      'SCOPE: ROOFING ONLY. Extract roofing data only.',
+      '- Ignore siding, wall, soffit, fascia, J-channel, corner trim, and similar siding content.',
+      '- If the document mixes scopes, return ONLY roofing takeoffs, specs, line items, and concerns.',
+      '- If the document is entirely siding, return empty arrays.',
+    ].join('\n');
+  }
+  if (scope === 'siding') {
+    return [
+      'SCOPE: SIDING ONLY. Extract siding data only.',
+      '- Ignore roofing, membrane, shingles, ridge, hip, valley, drip edge, deck repair, and similar roofing content.',
+      '- If the document mixes scopes, return ONLY siding takeoffs, specs, line items, and concerns.',
+      '- If the document is entirely roofing, return empty arrays.',
+    ].join('\n');
+  }
+  return 'SCOPE: ROOFING + SIDING. Extract everything relevant to either trade.';
+}
+
+function buildParsePrompt(scope: ParseScope): string {
+  const includeRoofing = scope === 'roofing' || scope === 'both';
+  const includeSiding = scope === 'siding' || scope === 'both';
+
+  const takeoffsRoofing = includeRoofing
+    ? '   ROOFING: total roof area (SQ), ridges (LF), hips (LF), valleys (LF), eaves (LF), rakes (LF), step flashing (LF), penetrations (each), skylights (each), drains (each), parapet (LF), pitch breakdown by area'
+    : '';
+  const takeoffsSiding = includeSiding
+    ? '   SIDING: total wall area (SF), corners inside/outside (LF), J-channel (LF), starter strip (LF), soffit (SF), fascia (LF), openings count and trim (LF), trim packages'
+    : '';
+  const lineRoofing = includeRoofing
+    ? '   ROOFING SCOPE: tear-off, deck repair, underlayment, ice & water shield, drip edge, starter, field shingles/membrane, ridge cap, hip & ridge, valley metal, step flashing, counter flashing, pipe boots, ventilation, skylight flashing, parapet wrap, drains, scuppers, walkway pads, edge metal, fasteners, sealant, dumpster, permits, labor'
+    : '';
+  const lineSiding = includeSiding
+    ? '   SIDING SCOPE: tear-off, WRB / housewrap, flashing tape, trim (J-channel, starter, corners, finish trim, F-channel, soffit, fascia), siding panels, vented soffit, accessories, fasteners, caulk, labor, scaffolding'
+    : '';
+
+  return `You are an expert estimator for a commercial roofing and siding contractor in the Pacific Northwest. Analyze this PDF and extract estimating data.
+
+${scopeBanner(scope)}
 
 DOCUMENT TYPES:
 - roofscope: aerial roof measurement report (areas, ridges, hips, valleys, eaves, rakes, penetrations)
@@ -62,12 +108,11 @@ DOCUMENT TYPES:
 
 EXTRACTION RULES:
 
-1. TAKEOFFS — extract EVERY measurement. Examples:
-   ROOFING: total roof area (SQ), ridges (LF), hips (LF), valleys (LF), eaves (LF), rakes (LF), step flashing (LF), penetrations (each), skylights (each), drains (each), parapet (LF), pitch breakdown by area
-   SIDING: total wall area (SF), corners inside/outside (LF), J-channel (LF), starter strip (LF), soffit (SF), fascia (LF), openings count and trim (LF), trim packages
+1. TAKEOFFS — extract EVERY measurement that falls within the scope above. Examples:
+${[takeoffsRoofing, takeoffsSiding].filter(Boolean).join('\n')}
    Always include unit. Use SQ for roofing squares (100 SF), SF for siding square feet, LF for linear feet, EA for each.
 
-2. SPECS — from spec sheets, capture every requirement in Divisions 6 (Wood/Plastics), 7 (Thermal & Moisture), 9 (Finishes), and any siding/roofing related sections:
+2. SPECS — from spec sheets, capture requirements relevant to the scope above (Divisions 6 Wood/Plastics, 7 Thermal & Moisture, 9 Finishes, and any related sections):
    - Approved manufacturers and exact product names
    - Material specs (thickness, mil, gauge, color, R-value, weight, finish)
    - Warranty terms (years, NDL, system, material vs labor)
@@ -75,12 +120,11 @@ EXTRACTION RULES:
    - Underlayment, fasteners, sealants, flashings, adhesives
    - Application requirements & substrate prep
 
-3. LINE ITEMS — generate a COMPLETE bid. Cover every material and labor scope you can infer from takeoffs + specs:
-   ROOFING SCOPE: tear-off, deck repair, underlayment, ice & water shield, drip edge, starter, field shingles/membrane, ridge cap, hip & ridge, valley metal, step flashing, counter flashing, pipe boots, ventilation, skylight flashing, parapet wrap, drains, scuppers, walkway pads, edge metal, fasteners, sealant, dumpster, permits, labor
-   SIDING SCOPE: tear-off, WRB / housewrap, flashing tape, trim (J-channel, starter, corners, finish trim, F-channel, soffit, fascia), siding panels, vented soffit, accessories, fasteners, caulk, labor, scaffolding
+3. LINE ITEMS — generate a COMPLETE bid for the scope above. Cover every material and labor item you can infer from takeoffs + specs:
+${[lineRoofing, lineSiding].filter(Boolean).join('\n')}
    For every line item, include a material_key — an UPPER_SNAKE_CASE identifier that describes the canonical material (e.g. "TPO_MEMBRANE_60MIL_WHITE", "GAF_TIMBERLINE_HDZ", "JAMES_HARDIE_PLANK_SELECT_CEDARMILL", "LP_SMARTSIDE_38_TRIM_4IN"). This is used to look up prices in the contractor's database.
 
-4. CONCERNS — flag anything that adds risk:
+4. CONCERNS — flag anything that adds risk WITHIN THE SCOPE ABOVE:
    - Complex flashing details, custom fab
    - Spec conflicts between plans and specs
    - Existing conditions concerns
@@ -108,26 +152,29 @@ Respond with ONLY valid JSON (no markdown fences, no commentary):
 }
 
 Leave unit_price as 0 — the contractor's price database will fill it in.`;
+}
 
-export async function parsePdfDocument(pdfPath: string): Promise<ParsedDocument> {
+export async function parsePdfDocument(pdfPath: string, scope: ParseScope = 'both'): Promise<ParsedDocument> {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY environment variable is required');
   }
 
   const buffer = fs.readFileSync(pdfPath);
-  return parsePdfBuffer(buffer);
+  return parsePdfBuffer(buffer, scope);
 }
 
-export async function parsePdfBuffer(buffer: Buffer): Promise<ParsedDocument> {
+export async function parsePdfBuffer(buffer: Buffer, scope: ParseScope = 'both'): Promise<ParsedDocument> {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY environment variable is required');
   }
 
   const chunks = await splitPdf(buffer);
   if (chunks.length === 1) {
-    return parsePdfSingle(chunks[0]);
+    return parsePdfSingle(chunks[0], scope);
   }
-  const partials = await Promise.all(chunks.map((c, i) => parsePdfSingle(c, `pages chunk ${i + 1} of ${chunks.length}`)));
+  const partials = await Promise.all(
+    chunks.map((c, i) => parsePdfSingle(c, scope, `pages chunk ${i + 1} of ${chunks.length}`))
+  );
   return mergeParsedDocuments(partials);
 }
 
@@ -170,7 +217,7 @@ async function extractPages(src: PDFDocument, start: number, end: number): Promi
   return Buffer.from(bytes);
 }
 
-async function parsePdfSingle(buffer: Buffer, chunkLabel?: string): Promise<ParsedDocument> {
+async function parsePdfSingle(buffer: Buffer, scope: ParseScope, chunkLabel?: string): Promise<ParsedDocument> {
   const base64 = buffer.toString('base64');
 
   const response = await anthropic.messages.create({
@@ -188,7 +235,7 @@ async function parsePdfSingle(buffer: Buffer, chunkLabel?: string): Promise<Pars
               data: base64,
             },
           } as any,
-          { type: 'text', text: chunkLabel ? `${PARSE_PROMPT}\n\nNote: this is ${chunkLabel} of a larger PDF.` : PARSE_PROMPT },
+          { type: 'text', text: chunkLabel ? `${buildParsePrompt(scope)}\n\nNote: this is ${chunkLabel} of a larger PDF.` : buildParsePrompt(scope) },
         ],
       },
     ],
