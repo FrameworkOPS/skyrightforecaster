@@ -1,7 +1,13 @@
 import fs from 'fs';
 import Anthropic from '@anthropic-ai/sdk';
+import { PDFDocument } from 'pdf-lib';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// Anthropic PDF document limits: 32 MB and 100 pages per request.
+// Stay well under both — large plan sets get split into chunks.
+const MAX_CHUNK_BYTES = 28 * 1024 * 1024;
+const MAX_CHUNK_PAGES = 40;
 
 interface ParsedDocument {
   docType: 'roofscope' | 'sidingscope' | 'spec_sheet' | 'plan_set' | 'unknown';
@@ -117,6 +123,46 @@ export async function parsePdfBuffer(buffer: Buffer): Promise<ParsedDocument> {
     throw new Error('ANTHROPIC_API_KEY environment variable is required');
   }
 
+  const chunks = await splitPdf(buffer);
+  if (chunks.length === 1) {
+    return parsePdfSingle(chunks[0]);
+  }
+  const partials = await Promise.all(chunks.map((c, i) => parsePdfSingle(c, `pages chunk ${i + 1} of ${chunks.length}`)));
+  return mergeParsedDocuments(partials);
+}
+
+async function splitPdf(buffer: Buffer): Promise<Buffer[]> {
+  if (buffer.byteLength <= MAX_CHUNK_BYTES) {
+    // Even if under size cap, page count might exceed 100 — inspect to be sure
+    try {
+      const src = await PDFDocument.load(buffer, { ignoreEncryption: true });
+      if (src.getPageCount() <= MAX_CHUNK_PAGES) return [buffer];
+      return splitByPages(src);
+    } catch {
+      // If we can't load it, hand the original buffer to Claude — let the API surface the real error
+      return [buffer];
+    }
+  }
+  const src = await PDFDocument.load(buffer, { ignoreEncryption: true });
+  return splitByPages(src);
+}
+
+async function splitByPages(src: PDFDocument): Promise<Buffer[]> {
+  const totalPages = src.getPageCount();
+  const chunks: Buffer[] = [];
+  for (let start = 0; start < totalPages; start += MAX_CHUNK_PAGES) {
+    const end = Math.min(start + MAX_CHUNK_PAGES, totalPages);
+    const dest = await PDFDocument.create();
+    const pageIndices = Array.from({ length: end - start }, (_, k) => start + k);
+    const copied = await dest.copyPages(src, pageIndices);
+    copied.forEach((p) => dest.addPage(p));
+    const bytes = await dest.save();
+    chunks.push(Buffer.from(bytes));
+  }
+  return chunks;
+}
+
+async function parsePdfSingle(buffer: Buffer, chunkLabel?: string): Promise<ParsedDocument> {
   const base64 = buffer.toString('base64');
 
   const response = await anthropic.messages.create({
@@ -134,21 +180,18 @@ export async function parsePdfBuffer(buffer: Buffer): Promise<ParsedDocument> {
               data: base64,
             },
           } as any,
-          { type: 'text', text: PARSE_PROMPT },
+          { type: 'text', text: chunkLabel ? `${PARSE_PROMPT}\n\nNote: this is ${chunkLabel} of a larger PDF.` : PARSE_PROMPT },
         ],
       },
     ],
   });
 
   const text = response.content.find((c) => c.type === 'text')?.text || '';
-
-  // Strip code fences if present
   const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   const jsonStr = (fenceMatch ? fenceMatch[1] : text).trim();
 
   try {
     const parsed = JSON.parse(jsonStr);
-    // Defensive defaults
     return {
       docType: parsed.docType || 'unknown',
       summary: parsed.summary || '',
@@ -160,4 +203,32 @@ export async function parsePdfBuffer(buffer: Buffer): Promise<ParsedDocument> {
   } catch {
     throw new Error(`Claude returned invalid JSON. Raw response (first 800 chars): ${text.substring(0, 800)}`);
   }
+}
+
+function mergeParsedDocuments(docs: ParsedDocument[]): ParsedDocument {
+  // Pick the most-specific docType (anything other than 'unknown' wins)
+  const docType = docs.map((d) => d.docType).find((t) => t && t !== 'unknown') || docs[0]?.docType || 'unknown';
+  const summary = docs.map((d) => d.summary).filter(Boolean).join(' ');
+
+  const takeoffs = dedupeByKey(docs.flatMap((d) => d.takeoffs), (t) => `${(t.label || '').toLowerCase()}|${(t.unit || '').toUpperCase()}`);
+  const specs = dedupeByKey(docs.flatMap((d) => d.specs), (s) => `${(s.section || '').toLowerCase()}|${(s.description || '').toLowerCase()}`);
+  const concerns = dedupeByKey(docs.flatMap((d) => d.concerns), (c) => (c.description || '').toLowerCase());
+  const lineItems = dedupeByKey(
+    docs.flatMap((d) => d.lineItems),
+    (li) => `${(li.material_key || '').toLowerCase()}|${(li.description || '').toLowerCase()}`
+  );
+
+  return { docType: docType as ParsedDocument['docType'], summary, takeoffs, specs, concerns, lineItems };
+}
+
+function dedupeByKey<T>(arr: T[], keyFn: (item: T) => string): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of arr) {
+    const k = keyFn(item);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(item);
+  }
+  return out;
 }
