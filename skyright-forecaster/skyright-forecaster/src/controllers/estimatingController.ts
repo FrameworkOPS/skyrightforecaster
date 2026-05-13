@@ -242,6 +242,9 @@ export const deleteDocument = asyncHandler(async (req: Request, res: Response) =
   const doc = await query('SELECT * FROM estimate_documents WHERE id = $1 AND project_id = $2', [docId, projectId]);
   if (doc.rows[0]) {
     try { fs.unlinkSync(doc.rows[0].file_path); } catch {}
+    // estimate_specs.source_doc_id has a FK to estimate_documents with no cascade,
+    // so any specs created when this doc was parsed must be cleared first.
+    await query('DELETE FROM estimate_specs WHERE source_doc_id = $1', [docId]);
     await query('DELETE FROM estimate_documents WHERE id = $1', [docId]);
   }
   res.json({ success: true });
